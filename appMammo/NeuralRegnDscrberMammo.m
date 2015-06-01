@@ -1,4 +1,4 @@
-classdef NeuralRegnDscrber < handle
+classdef NeuralRegnDscrberMammo < handle
     properties
         srcDb;
         srcCnn;
@@ -9,7 +9,7 @@ classdef NeuralRegnDscrber < handle
         useGpu;
     end
     methods
-        function this = NeuralRegnDscrber...
+        function this = NeuralRegnDscrberMammo...
                 ( srcDb, srcCnn, settingDesc, settingDic, useGpu )
             this.srcDb                          = srcDb;
             this.srcCnn                         = srcCnn;
@@ -271,7 +271,7 @@ classdef NeuralRegnDscrber < handle
         end
         % Functions for sample descriptor I/O.
         function name = getSmplDescName( this )
-            name = sprintf( 'NRDSMPL_LI%d_MS%s_OF_%s', ...
+            name = sprintf( 'NRDMSMPL_LI%d_MS%s_OF_%s', ...
                 this.settingDesc.layerId, ...
                 mat2str( this.settingDesc.maxSides ), ...
                 this.srcCnn.name );
@@ -318,7 +318,7 @@ classdef NeuralRegnDscrber < handle
         end
         % Functions for descriptor I/O.
         function name = getDescName( this )
-            name = sprintf( 'NRD_%s_OF_%s', ...
+            name = sprintf( 'NRDM_%s_OF_%s', ...
                 this.settingDesc.changes, ...
                 this.srcCnn.name );
             name( strfind( name, '__' ) ) = '';
@@ -329,7 +329,7 @@ classdef NeuralRegnDscrber < handle
             if length( name ) > 150, 
                 name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) ); 
                 name = sprintf( '%010d', name );
-                name = strcat( 'NRD_', name );
+                name = strcat( 'NRDM_', name );
             end
             dir = fullfile...
                 ( this.srcDb.dstDir, name );
