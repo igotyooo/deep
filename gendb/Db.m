@@ -1,8 +1,8 @@
 classdef Db < handle
     properties
-        dir;
-        dbName;
-        funGenDb;
+        dstDir;
+        name;
+        funh;
         cid2name;
         cid2diids;
         iid2impath;
@@ -16,10 +16,10 @@ classdef Db < handle
         oid2bbox;
     end
     methods
-        function this = Db( setting )
-            this.dir = fullfile( setting.dir, setting.dbName );
-            this.dbName = setting.dbName;
-            this.funGenDb = setting.funGenDb;
+        function this = Db( setting, dstDir )
+            this.dstDir = fullfile( dstDir, setting.name );
+            this.name = setting.name;
+            this.funh = setting.funh;
         end
         function genDb( this )
             fpath = this.getPath;
@@ -40,7 +40,7 @@ classdef Db < handle
                     db.oid2cid, ...
                     db.oid2diff, ...
                     db.oid2iid, ...
-                    db.oid2bbox ] = this.funGenDb(  );
+                    db.oid2bbox ] = this.funh(  );
                 oid2out = 1 - db.oid2bbox( 1, : ) > 0;
                 db.oid2bbox( 1, oid2out ) = 1;
                 oid2out = 1 - db.oid2bbox( 2, : ) > 0;
@@ -127,12 +127,12 @@ classdef Db < handle
             iids = this.oid2iid( this.oid2cid == cid );
             iids = unique( iids );
             newdb = this.reduceDb...
-                ( iids, cid, strcat( this.dbName, cname ) );
+                ( iids, cid, strcat( this.name, cname ) );
         end
         function newdb = reduceDb( this, iids, cids, newName )
-            setting.dir = fileparts( this.dir );
-            setting.dbName = upper( newName );
-            setting.funGenDb = this.funGenDb;
+            setting.dir = fileparts( this.dstDir );
+            setting.name = upper( newName );
+            setting.funh = this.funh;
             newdb = Db( setting );
             % Reordering.
             numim = numel( this.iid2impath );
@@ -175,7 +175,7 @@ classdef Db < handle
             name = upper( mfilename );
         end
         function dir = getDir( this )
-            dir = this.dir;
+            dir = this.dstDir;
         end
         function dir = makeDir( this )
             dir = this.getDir;

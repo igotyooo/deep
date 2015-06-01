@@ -8,11 +8,11 @@ function [  cid2name, ...
             oid2bbox ] = DB_VOC2007
 
     global path;
-    triids = dlmread( fullfile( path.db_voc2007.root, 'ImageSets', 'Main', 'trainval.txt' ) );
-    teiids = dlmread( fullfile( path.db_voc2007.root, 'ImageSets', 'Main', 'test.txt' ) );
+    triids = dlmread( fullfile( path.db.voc2007.root, 'ImageSets', 'Main', 'trainval.txt' ) );
+    teiids = dlmread( fullfile( path.db.voc2007.root, 'ImageSets', 'Main', 'test.txt' ) );
     numIm = length( triids ) + length( teiids );
-    imdir = fullfile( path.db_voc2007.root, 'JPEGImages' );
-    annodir = fullfile( path.db_voc2007.root, 'Annotations' );
+    imdir = fullfile( path.db.voc2007.root, 'JPEGImages' );
+    annodir = fullfile( path.db.voc2007.root, 'Annotations' );
     iid2impath = arrayfun( @( iid )fullfile( imdir, sprintf( '%06d.jpg', iid ) ), 1 : numIm, 'UniformOutput', false )';
     iid2annopath = arrayfun( @( iid )fullfile( annodir, sprintf( '%06d.xml', iid ) ), 1 : numIm, 'UniformOutput', false )';
     iid2setid = zeros( size( iid2impath ) );

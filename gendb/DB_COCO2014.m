@@ -8,7 +8,7 @@ function [  cid2name, ...
             oid2bbox ] = DB_COCO2014
 
     global path;
-    srcpath = path.db_coco2014.root;
+    srcpath = path.db.coco2014.root;
 
     % Convert json to mat.
     setnames = { 'train2014', 'val2014' };

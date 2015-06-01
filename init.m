@@ -6,6 +6,8 @@ path.lib.ilsvrcDevKit                   = '/iron/lib/ILSVRC2014_devkit/';
 path.lib.vlfeat                         = '/iron/lib/vlfeat/vlfeat-0.9.19/';
 path.lib.jsgd                           = '/iron/lib/jsgd-61/';
 path.lib.selectiveSearch                = '/iron/lib/selectiveSearch/SelectiveSearchCodeIJCV/';
+% Set dst dir.
+path.dstDir                             = '/nickel/data_new/';
 % Set image DB path only.
 path.db.voc2007.name                    = 'VOC2007';
 path.db.voc2007.funh                    = @DB_VOC2007;
@@ -16,21 +18,22 @@ path.db.coco2014.root                   = '/iron/db/COCO2014';
 path.db.caltech_pedestrian.name         = 'CALTECH_PEDESTRIAN';
 path.db.caltech_pedestrian.funh         = @DB_CALTECH_PEDESTRIAN;
 path.db.caltech_pedestrian.root         = '/iron/db/CALTECH_PEDESTRIAN';
+path.db.ddsm.name                       = 'DDSM';
+path.db.ddsm.root                       = '/iron/db/DDSM_CB';
+path.db.ddsm.funh                       = @DB_DDSM;
 % Set pre-trained CNN path only.
 path.net.caffeRef.name                  = 'CAFFREF';
-path.net.caffeRef.path                  = '/iron/data/TRAINED_NETS/imagenet-caffe-ref.mat';
+path.net.caffeRef.path                  = '/iron/net/imagenet-caffe-ref.mat';
 path.net.alex.name                      = 'CAFFALX';
-path.net.alex.path                      = '/iron/data/TRAINED_NETS/imagenet-caffe-alex.mat';
+path.net.alex.path                      = '/iron/net/imagenet-caffe-alex.mat';
 path.net.vgg_f.name                     = 'VGGF';
-path.net.vgg_f.path                     = '/iron/data/TRAINED_NETS/imagenet-vgg-f.mat';
+path.net.vgg_f.path                     = '/iron/net/imagenet-vgg-f.mat';
 path.net.vgg_s.name                     = 'VGGS';
-path.net.vgg_s.path                     = '/iron/data/TRAINED_NETS/imagenet-vgg-s.mat';
+path.net.vgg_s.path                     = '/iron/net/imagenet-vgg-s.mat';
 path.net.vgg_m.name                     = 'VGGM';
-path.net.vgg_m.path                     = '/iron/data/TRAINED_NETS/imagenet-vgg-m.mat';
-path.net.vgg_m_2048.name                = 'VGGM2048';
-path.net.vgg_m_2048.path                = '/iron/data/TRAINED_NETS/imagenet-vgg-m-2048.mat';
-path.net.vgg_m_1024.name                = 'VGGM1024';
-path.net.vgg_m_1024.path                = '/iron/data/TRAINED_NETS/imagenet-vgg-m-1024.mat';
+path.net.vgg_m.path                     = '/iron/net/imagenet-vgg-m.mat';
+path.net.ddsm.name                      = 'DDSM';
+path.net.ddsm.path                      = '/iron/net/ddsm-ft-alex.mat';
 % Do not touch the following codes.
 run( fullfile( path.lib.vlfeat, 'toolbox/vl_setup.m' ) );       % VLFeat.
 run( fullfile( path.lib.matConvNet, 'matlab/vl_setupnn.m' ) );  % MatConvnet.
