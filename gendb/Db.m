@@ -58,7 +58,8 @@ classdef Db < handle
                     db.iid2oids, ...
                     'UniformOutput', false )';
                 db.cid2diids = arrayfun( ...
-                    @( cid )setdiff( db.oid2iid( db.oid2cid == cid ), db.oid2iid( ~db.oid2diff ) ), ...
+                    @( cid )setdiff...
+                    ( db.oid2iid( db.oid2cid == cid ), db.oid2iid( ~db.oid2diff ) ), ...
                     1 : numel( db.cid2name ), ...
                     'UniformOutput', false )';
                 fprintf( '%s: Save DB.\n', ...
@@ -113,15 +114,42 @@ classdef Db < handle
         function ismulti = isMutiLabel( this )
             ismulti = any( cellfun( @length, this.iid2cids ) ~= 1 );
         end
+        function cid2idxs = getCid2idxs( this, idx2iid )
+            idx2cids = this.iid2cids( idx2iid );
+            idxthread = cellfun( @( x, y ) y * ones( size( x ) ), ...
+                idx2cids, num2cell( 1 : numel( idx2cids ) )', ...
+                'UniformOutput', false );
+            idxthread = cat( 1, idxthread{ : } );
+            cidthread = cat( 1, idx2cids{ : } );
+            numCls = this.getNumClass;
+            cid2idxs = cell( numCls, 1 );
+            for gtid = 1 : numCls,
+                cid2idxs{ gtid } = idxthread( cidthread == gtid ); end;
+        end
+        function cid2didxs = getCid2didxs( this, idx2iid )
+            cid2didxs = cell( this.getNumClass, 1 );
+            for cid = 1 : this.getNumClass
+                diids = this.cid2diids{ cid };
+                didxs = arrayfun( ...
+                    @( diid )find( idx2iid == diid ), ...
+                    diids, ...
+                    'UniformOutput', false );
+                cid2didxs{ cid } = cat( 1, didxs{ : } );
+            end
+        end
         function newdb = mergeCls( this, newcid2cids, newDbName )
             cid2newcid = zeros( size( this.cid2name ) );
             for cid = 1 : this.getNumClass
-                cid2newcid( cid ) = find( cellfun( @( cids )ismember( cid, cids ), newcid2cids ) );
+                cid2newcid( cid ) = ...
+                    find( cellfun( @( cids )ismember( cid, cids ), newcid2cids ) );
             end
             db.oid2cid = cid2newcid( this.oid2cid );
-            cid2name_ = cellfun( @( name )strcat( name, ',' ), this.cid2name, 'UniformOutput', false );
-            db.cid2name = cellfun( @( cids )strcat( cid2name_{ cids } ), newcid2cids, 'UniformOutput', false );
-            db.cid2name = cellfun( @( name )name( 1 : end - 1 ), db.cid2name, 'UniformOutput', false );
+            cid2name_ = cellfun( @( name )strcat( name, ',' ), ...
+                this.cid2name, 'UniformOutput', false );
+            db.cid2name = cellfun( @( cids )strcat( cid2name_{ cids } ), ...
+                newcid2cids, 'UniformOutput', false );
+            db.cid2name = cellfun( @( name )name( 1 : end - 1 ), ...
+                db.cid2name, 'UniformOutput', false );
             db.iid2impath = this.iid2impath;
             db.iid2size = this.iid2size;
             db.iid2setid = this.iid2setid;
@@ -137,7 +165,8 @@ classdef Db < handle
                 db.iid2oids, ...
                 'UniformOutput', false )';
             db.cid2diids = arrayfun( ...
-                @( cid )setdiff( db.oid2iid( db.oid2cid == cid ), db.oid2iid( ~db.oid2diff ) ), ...
+                @( cid )setdiff...
+                ( db.oid2iid( db.oid2cid == cid ), db.oid2iid( ~db.oid2diff ) ), ...
                 1 : numel( db.cid2name ), ...
                 'UniformOutput', false )';
             dstDir_ = fileparts( this.dstDir );
@@ -211,7 +240,8 @@ classdef Db < handle
             newdb.iid2setid = this.iid2setid( newiid2iid );
             newdb.iid2size = this.iid2size( :, newiid2iid );
             this.makeDir;
-            fprintf( '%s: reduced to %s\n', upper( mfilename ), upper( newDbName ) );
+            fprintf( '%s: reduced to %s\n', ...
+                upper( mfilename ), upper( newDbName ) );
         end
         % Functions for object identification.
         function name = getName( this )

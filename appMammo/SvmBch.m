@@ -7,28 +7,20 @@ classdef SvmBch < handle
     end    
     methods
         function this = SvmBch( srcDb, srcImDscrber, setting )
-            this.srcDb                          = srcDb;
-            this.srcImDscrber                   = srcImDscrber;
-            this.prll                           = false;
-            this.setting.kernel                 = 'NONE';
-            this.setting.norm                   = 'L2';
-            this.setting.c                      = 10;
-            this.setting.trAug                  = 'SA';
-            this.setting.teAug                  = 'SMP';
-            this.setting.epsilon                = 1e-3;
-            this.setting.biasMultiplier         = 1;
-            this.setting.biasLearningRate       = 0.5;
-            this.setting.loss                   = 'HINGE';
-            this.setting.solver                 = 'SDCA';
+            this.srcDb                      = srcDb;
+            this.srcImDscrber               = srcImDscrber;
+            this.setting.kernel             = 'NONE';
+            this.setting.norm               = 'L2';
+            this.setting.c                  = 10;
+            this.setting.trAug              = 'SA';
+            this.setting.teAug              = 'SMP';
+            this.setting.epsilon            = 1e-3;
+            this.setting.biasMultiplier     = 1;
+            this.setting.biasLearningRate   = 0.5;
+            this.setting.loss               = 'HINGE';
+            this.setting.solver             = 'SDCA';
             this.setting = setChanges...
                 ( this.setting, setting, upper( mfilename ) );
-        end
-        function setPrll( this, prll )
-            this.prll = prll;
-            if prll
-                fprintf( '%s: Parallel processing mode.\n', ...
-                    upper( mfilename ) );
-            end
         end
         function trainSvm( this )
             fprintf( '%s: Check if svm exist.\n', ...
@@ -45,26 +37,11 @@ classdef SvmBch < handle
                 fprintf( '%s: No svm to train.\n', ...
                     upper( mfilename ) ); return; 
             end;
-            traug = this.setting.trAug;
-            norm = this.setting.norm;
             idx2iid = this.srcDb.getTriids;
             idx2iid = idx2iid( randperm( numel( idx2iid ) )' );
             idx2desc = this.loadDbDescs( idx2iid );
-            numaug = size( idx2desc, 2 ) / numel( idx2iid );
-            switch traug
-                case 'SA' % Stand-alone training.
-                    idx2iid = repmat( idx2iid', numaug, 1 );
-                    idx2iid = idx2iid( : );
-                case 'AP' % Average pooling training.
-                    numim = numel( idx2iid );
-                    dim = size( idx2desc, 1 );
-                    idx2desc = reshape( idx2desc, [ dim, numaug, numim ] );
-                    idx2desc = mean( idx2desc, 2 );
-                    idx2desc = reshape( idx2desc, [ dim, numim ] );
-                    idx2desc = nmlzVecs( idx2desc, norm ); %%
-            end
-            cid2idxs = this.srcDb.gtid2idxs( idx2iid );
-            cid2didxs = this.srcDb.gtid2didxs( idx2iid );
+            cid2idxs = this.srcDb.getCid2idxs( idx2iid );
+            cid2didxs = this.srcDb.getCid2didxs( idx2iid );
             this.makeDir;
             cnt = 0; cummt = 0; numIm = numel( cids );
             for cid = cids'; itime = tic;
@@ -88,15 +65,12 @@ classdef SvmBch < handle
                 sendEmail( ...
                     'visionresearchreport@gmail.com', ...
                     'visionresearchreporter', ...
-                    addrss, ...
-                    title, ...
-                    mssg, ...
-                    [  ] );
+                    addrss, title, mssg, [  ] );
             end
         end
         function cid2score = predictIm( this, im )
             kernel = this.setting.kernel;
-            norm   = this.setting.norm;
+            norm = this.setting.norm;
             cid2w = this.loadSvm;
             desc = this.srcImDscrber.im2desc...
                 ( im, kernel, norm );
@@ -105,9 +79,9 @@ classdef SvmBch < handle
         end
         function descs = loadDbDescs( this, iids )
             kernel = this.setting.kernel;
-            norm   = this.setting.norm;
-            numIm  = numel( iids );
-            descs  = cell( numIm, 1 );
+            norm = this.setting.norm;
+            numIm = numel( iids );
+            descs = cell( numIm, 1 );
             prgrss = 0; cummt = 0; numIm = numel( iids );
             for i = 1 : numIm; itime = tic; iid = iids( i );
                 desc = this.srcImDscrber.iid2desc...
@@ -127,14 +101,14 @@ classdef SvmBch < handle
                 data = load( fpath );
                 w = data.w;
             catch
-                c                   = this.setting.c;
-                epsilon             = this.setting.epsilon;
-                biasMultiplier      = this.setting.biasMultiplier;
-                biasLearningRate    = this.setting.biasLearningRate;
-                loss                = this.setting.loss;
-                solver              = this.setting.solver;
-                numDesc             = size( idx2desc, 2 );
-                lambda              = 1 / ( numDesc * c );
+                c = this.setting.c;
+                epsilon = this.setting.epsilon;
+                biasMultiplier = this.setting.biasMultiplier;
+                biasLearningRate = this.setting.biasLearningRate;
+                loss = this.setting.loss;
+                solver = this.setting.solver;
+                numDesc = size( idx2desc, 2 );
+                lambda = 1 / ( numDesc * c );
                 svmSetting = { ...
                     'Epsilon', epsilon, ...
                     'BiasMultiplier', biasMultiplier, ...
@@ -151,51 +125,19 @@ classdef SvmBch < handle
         end
         function [ idx2cscore, cid2idxs, cid2didxs ] = ...
                 testSvm( this )
-            path        = this.getTestPath;
-            idx2iid     = this.srcDb.getTeiids;
-            cid2idxs    = this.srcDb.gtid2idxs( idx2iid );
-            cid2didxs   = this.srcDb.gtid2didxs( idx2iid );
+            path = this.getTestPath;
+            idx2iid = this.srcDb.getTeiids;
+            cid2idxs = this.srcDb.getCid2idxs( idx2iid );
+            cid2didxs = this.srcDb.getCid2didxs( idx2iid );
             try
                 data = load( path );
                 idx2cscore = data.idx2cscore;
             catch
-                teaug = this.setting.teAug;
-                norm = this.setting.norm;
                 idx2desc = this.loadDbDescs( idx2iid );
                 cid2w = this.loadSvm;
-                switch teaug
-                    case 'SMP' % Max pooling of scores.
-                        idx2desc = cat( 1, idx2desc, ...
-                            ones( 1, size( idx2desc, 2 ) ) );
-                        idx2cscore = cid2w' * idx2desc;
-                        numim = numel( idx2iid );
-                        numaug = size( idx2cscore, 2 ) / numim;
-                        dim = size( idx2cscore, 1 );
-                        idx2cscore = reshape( idx2cscore, [ dim, numaug, numim ] );
-                        idx2cscore = max( idx2cscore, [  ], 2 );
-                        idx2cscore = reshape( idx2cscore, [ dim, numim ] );
-                    case 'SAP' % Average pooling of scores.
-                        idx2desc = cat( 1, idx2desc, ...
-                            ones( 1, size( idx2desc, 2 ) ) );
-                        idx2cscore = cid2w' * idx2desc;
-                        numim = numel( idx2iid );
-                        numaug = size( idx2cscore, 2 ) / numim;
-                        dim = size( idx2cscore, 1 );
-                        idx2cscore = reshape( idx2cscore, [ dim, numaug, numim ] );
-                        idx2cscore = mean( idx2cscore, 2 );
-                        idx2cscore = reshape( idx2cscore, [ dim, numim ] );
-                    case 'VAP' % Average pooling of vectors.
-                        numim = numel( idx2iid );
-                        numaug = size( idx2desc, 2 ) / numim;
-                        dim = size( idx2desc, 1 );
-                        idx2desc = reshape( idx2desc, [ dim, numaug, numim ] );
-                        idx2desc = mean( idx2desc, 2 );
-                        idx2desc = reshape( idx2desc, [ dim, numim ] );
-                        idx2desc = nmlzVecs( idx2desc, norm ); %%
-                        idx2desc = cat( 1, idx2desc, ...
-                            ones( 1, size( idx2desc, 2 ) ) );
-                        idx2cscore = cid2w' * idx2desc;
-                end
+                idx2desc = cat( 1, idx2desc, ...
+                    ones( 1, size( idx2desc, 2 ) ) );
+                idx2cscore = cid2w' * idx2desc;
                 this.makeDir;
                 save( path, 'idx2cscore' );
             end
@@ -219,14 +161,14 @@ classdef SvmBch < handle
         end
         function [ cid2ap, cid2ap11 ] = computeAp...
                 ( this, idx2cscore, cid2idxs, cid2didxs )
-            numClass    = this.srcDb.getNumClass;
-            numDesc     = size( idx2cscore, 2 );
-            cid2ap      = zeros( numClass, 1 );
-            cid2ap11    = zeros( numClass, 1 );
+            numClass = this.srcDb.getNumClass;
+            numDesc = size( idx2cscore, 2 );
+            cid2ap = zeros( numClass, 1 );
+            cid2ap11 = zeros( numClass, 1 );
             for cid = 1 : numClass
                 idx2y = -1 * ones( numDesc, 1 );
-                idx2y( cid2idxs{ cid } )    = 1;
-                idx2y( cid2didxs{ cid } )   = 0;
+                idx2y( cid2idxs{ cid } ) = 1;
+                idx2y( cid2didxs{ cid } ) = 0;
                 [ ~, ~, info ] = vl_pr( idx2y, idx2cscore( cid, : )' );
                 cid2ap( cid ) = info.ap;
                 cid2ap11( cid ) = info.ap_interp_11;
@@ -264,20 +206,20 @@ classdef SvmBch < handle
             mssg = {  };
             mssg{ end + 1 } = '___________';
             mssg{ end + 1 } = 'TEST REPORT';
-            mssg{ end + 1 } = sprintf( 'DATABASE: %s', this.srcDb.dbName );
+            mssg{ end + 1 } = sprintf( 'DATABASE: %s', this.srcDb.name );
             mssg{ end + 1 } = sprintf( 'IMAGE DESCRIBER: %s', this.srcImDscrber.getName );
             mssg{ end + 1 } = sprintf( 'CLASSIFIER: %s', this.getSvmName );
             if this.srcDb.isMutiLabel
-                cid2ap = this.computeVocAp...
-                    ( idx2cscore, cid2idxs, cid2didxs );
-                mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
-                    mean( cid2ap ) * 100 );
-                % [ cid2ap, cid2ap11 ] = computeAp...
-                %     ( this, idx2cscore, cid2idxs, cid2didxs );
+                % cid2ap = this.computeVocAp...
+                %     ( idx2cscore, cid2idxs, cid2didxs );
                 % mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
                 %     mean( cid2ap ) * 100 );
-                % mssg{ end + 1 } = sprintf( 'MAP11: %.2f%%', ...
-                %     mean( cid2ap11 ) * 100 );
+                [ cid2ap, cid2ap11 ] = computeAp...
+                    ( this, idx2cscore, cid2idxs, cid2didxs );
+                mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
+                    mean( cid2ap ) * 100 );
+                mssg{ end + 1 } = sprintf( 'MAP11: %.2f%%', ...
+                    mean( cid2ap11 ) * 100 );
             else
                 mssg{ end + 1 } = sprintf( 'TOP1 ACCURACY: %.2f%%', ...
                     this.computeTopAcc( idx2cscore, 1 ) * 100 );
@@ -299,7 +241,7 @@ classdef SvmBch < handle
                 name = strcat( 'SB_', name );
             end
             dir = fullfile...
-                ( this.srcDb.dir, name );
+                ( this.srcDb.dstDir, name );
         end
         function dir = makeDir( this )
             dir = this.getDir;

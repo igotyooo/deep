@@ -11,6 +11,7 @@ setting.neuralRegnDesc.pcaDim           = 128;
 setting.neuralRegnDesc.kernelBeforePca  = 'NONE';
 setting.neuralRegnDesc.normBeforePca    = 'L2';
 setting.neuralRegnDesc.normAfterPca     = 'L2';
+setting.neuralRegnDesc.regionFiltering  = '';
 setting.neuralRegnDic.numTargetScale    = Inf;
 setting.neuralRegnDic.numGaussian       = 256;
 setting.fisher.normalizeByScale         = true;
@@ -27,15 +28,16 @@ setting.svm.solver                      = 'SDCA';
 %% DO THE JOB.
 db = Db( setting.db, path.dstDir );
 db.genDb;
-newdb = db.mergeCls( { [ 1, 4 ]; [ 2, 5 ]; [ 3, 6 ]; }, 'DDSM_BCN' );
+db = db.mergeCls( { [ 1, 4 ]; [ 2, 5 ]; [ 3, 6 ]; }, 'DDSM_BCN' );
 cnn = load( setting.cnn.path );
 cnn.name = setting.cnn.name;
 neuralRegnDscrber = ...
-    NeuralRegnDscrberMammo( newdb, cnn, ...
+    NeuralRegnDscrberMammo( db, cnn, ...
     setting.neuralRegnDesc, ...
     setting.neuralRegnDic, setting.useGpu );
 neuralRegnDscrber.init;
 neuralRegnDscrber.trainDic;
+neuralRegnDscrber.descDb;
 fisher = FisherMammo( neuralRegnDscrber, setting.fisher );
 imDscrber = ImDscrber( db, { fisher }, [  ] );
 imDscrber.descDb;
@@ -45,7 +47,7 @@ imDscrber.descDb;
 
 
 %% 
-im = imread( newdb.iid2impath{1} );
+im = imread( db.iid2impath{1} );
 rec = mammoCutter( im );
 
 
