@@ -114,47 +114,18 @@ classdef Db < handle
             ismulti = any( cellfun( @length, this.iid2cids ) ~= 1 );
         end
         function newdb = mergeCls( this, newcid2cids, newDbName )
-            cid2newcid = zeros( size( this.cid2name ) );
-            for cid = 1 : this.getNumClass
-                cid2newcid( cid ) = find( cellfun( @( cids )ismember( cid, cids ), newcid2cids ) );
-            end
-            db.oid2cid = cid2newcid( this.oid2cid );
-            cid2name_ = cellfun( @( name )strcat( name, ',' ), this.cid2name, 'UniformOutput', false );
-            db.cid2name = cellfun( @( cids )strcat( cid2name_{ cids } ), newcid2cids, 'UniformOutput', false );
-            db.cid2name = cellfun( @( name )name( 1 : end - 1 ), db.cid2name, 'UniformOutput', false );
-            db.iid2impath = this.iid2impath;
-            db.iid2size = this.iid2size;
-            db.iid2setid = this.iid2setid;
-            db.oid2diff = this.oid2diff;
-            db.oid2iid = this.oid2iid;
-            db.oid2bbox = this.oid2bbox;
-            db.iid2oids = arrayfun( ...
-                @( iid )find( db.oid2iid == iid ), ...
-                1 : numel( db.iid2setid ), ...
-                'UniformOutput', false )';
-            db.iid2cids = cellfun( ...
-                @( oids )unique( db.oid2cid( oids ) ), ...
-                db.iid2oids, ...
-                'UniformOutput', false )';
-            db.cid2diids = arrayfun( ...
-                @( cid )setdiff( db.oid2iid( db.oid2cid == cid ), db.oid2iid( ~db.oid2diff ) ), ...
-                1 : numel( db.cid2name ), ...
-                'UniformOutput', false )';
-            dstDir_ = fileparts( this.dstDir );
+            setting.dstDir = fileparts( this.dstDir );
             setting.name = upper( newDbName );
             setting.funh = this.funh;
-            newdb = Db( setting, dstDir_ );
-            newdb.cid2name   = db.cid2name;
-            newdb.cid2diids  = db.cid2diids;
-            newdb.iid2impath = db.iid2impath;
-            newdb.iid2size   = db.iid2size;
-            newdb.iid2cids   = db.iid2cids;
-            newdb.iid2oids   = db.iid2oids;
-            newdb.iid2setid  = db.iid2setid;
-            newdb.oid2cid    = db.oid2cid;
-            newdb.oid2diff   = db.oid2diff;
-            newdb.oid2iid    = db.oid2iid;
-            newdb.oid2bbox   = db.oid2bbox;
+            newdb = Db( setting );
+            numCls = numel( newcid2cids );
+            cid2newcid = zeros( size( this.cid2name ) );
+            cid2newcid = arrayfun( @( cid )find( ismember( cid, newcid2cids ) ), ( 1 : this.getNumClass )' );
+            oid2newcid = cid2newcid( oid2cid );
+            newcid2name = cell( numCls, 1 );
+            for newcid = 1 : numCls,
+                newcid2name = 
+            end
         end
         function newdb = reduceDbByCls( this, class )
             if isnumeric( class ), 

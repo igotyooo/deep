@@ -1,14 +1,14 @@
-classdef Fisher < handle
+classdef FisherMammo < handle
     properties
         srcRegnDscrber;
         setting;
     end
     methods
-        function this = Fisher...
+        function this = FisherMammo...
                 ( srcRegnDscrber, setting )
-            this.srcRegnDscrber                     = srcRegnDscrber;
-            this.setting.normalizeByScale           = true;
-            this.setting.spatialPyramid             = '11';
+            this.srcRegnDscrber             = srcRegnDscrber;
+            this.setting.normalizeByScale   = true;
+            this.setting.spatialPyramid     = '11';
             this.setting = setChanges...
                 ( this.setting, setting, upper( mfilename ) );
         end
@@ -26,9 +26,9 @@ classdef Fisher < handle
         end
         function spFisher = encodeSpFisher...
                 ( this, rid2geo, rid2desc, imsize )
-            spatialPyramid              = this.setting.spatialPyramid;
-            numLevel                    = length( spatialPyramid ) / 2;
-            layouts                     = reshape...
+            spatialPyramid = this.setting.spatialPyramid;
+            numLevel = length( spatialPyramid ) / 2;
+            layouts = reshape...
                 ( spatialPyramid, [ 2, numLevel ] );
             srid2level = cell( numLevel, 1 );
             subreg = cell( numLevel, 1 );
@@ -88,7 +88,7 @@ classdef Fisher < handle
         end
         % Functions for object identification.
         function name = getName( this )
-            name = sprintf( 'FV_%s_OF_%s', ...
+            name = sprintf( 'FVM_%s_OF_%s', ...
                 this.setting.changes, ...
                 this.srcRegnDscrber.getName );
             name( strfind( name, '__' ) ) = '';

@@ -27,40 +27,45 @@ setting.svm.solver                      = 'SDCA';
 %% DO THE JOB.
 db = Db( setting.db, path.dstDir );
 db.genDb;
+newdb = db.mergeCls( { [ 1, 4 ]; [ 2, 5 ]; [ 3, 6 ]; }, 'DDSM_BCN' );
 cnn = load( setting.cnn.path );
 cnn.name = setting.cnn.name;
 neuralRegnDscrber = ...
-    NeuralRegnDscrberMammo( db, cnn, ...
+    NeuralRegnDscrberMammo( newdb, cnn, ...
     setting.neuralRegnDesc, ...
     setting.neuralRegnDic, setting.useGpu );
 neuralRegnDscrber.init;
 neuralRegnDscrber.trainDic;
+fisher = FisherMammo( neuralRegnDscrber, setting.fisher );
+imDscrber = ImDscrber( db, { fisher }, [  ] );
+imDscrber.descDb;
+
+
+
+
+
+%% 
+im = imread( newdb.iid2impath{1} );
+rec = mammoCutter( im );
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 %% 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-fisher = Fisher( neuralRegnDscrber, setting.fisher );
-imDscrber = ImDscrber( db, { fisher }, [  ] );
-imDscrber.descDb;
 svm = SvmBch( db, imDscrber, setting.svm );
 svm.setPrll( false );
 svm.trainSvm;

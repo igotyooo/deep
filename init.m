@@ -19,7 +19,7 @@ path.db.caltech_pedestrian.name         = 'CALTECH_PEDESTRIAN';
 path.db.caltech_pedestrian.funh         = @DB_CALTECH_PEDESTRIAN;
 path.db.caltech_pedestrian.root         = '/iron/db/CALTECH_PEDESTRIAN';
 path.db.ddsm.name                       = 'DDSM';
-path.db.ddsm.root                       = '/iron/db/DDSM_CB';
+path.db.ddsm.root                       = '/iron/db/DDSM';
 path.db.ddsm.funh                       = @DB_DDSM;
 % Set pre-trained CNN path only.
 path.net.caffeRef.name                  = 'CAFFREF';

@@ -1,7 +1,7 @@
 classdef ImDscrber < handle
     properties
         srcDb;
-        srcDscrber;     % Can be Fisher, NeuralCode, Sift, Gist, Hog, ...
+        srcDscrber; % Can be Fisher, NeuralCode, Sift, Gist, Hog, ...
         setting;
     end
     methods
@@ -60,7 +60,7 @@ classdef ImDscrber < handle
                     data = load( fpath );
                     desc = data.desc;
                 catch
-                    im = imread( this.srcDb.iid2ifpath{ iid } );
+                    im = imread( this.srcDb.iid2impath{ iid } );
                     % Augment image.
                     if aug
                         [ h, w, ~ ] = size( im );
@@ -169,7 +169,7 @@ classdef ImDscrber < handle
                 name = strcat( 'ID_', name );
             end
             dir = fullfile...
-                ( this.srcDb.dir, name );
+                ( this.srcDb.dstDir, name );
         end
         function dir = makeDir( this, dscrberId )
             dir = this.getDir( dscrberId );

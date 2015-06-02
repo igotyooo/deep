@@ -4,33 +4,53 @@ function [ cid2name, iid2impath, iid2size, iid2setid, oid2cid, oid2diff, oid2iid
     global path;
     rootdir = path.db.ddsm.root;
     
-    dir_bentr = fullfile( rootdir, 'tr', 'benign' );
-    dir_cantr = fullfile( rootdir, 'tr', 'cancer' );
-    dir_nortr = fullfile( rootdir, 'tr', 'normal' );
+    cid2name = { 'benign_cc'; 'cancer_cc'; 'normal_cc'; 'benign_mlo'; 'cancer_mlo'; 'normal_mlo'; };
     
-    dir_bente = fullfile( rootdir, 'te', 'benign' );
-    dir_cante = fullfile( rootdir, 'te', 'cancer' );
-    dir_norte = fullfile( rootdir, 'te', 'normal' );
+    dir_bentr_cc = fullfile( rootdir, 'tr', 'benign_cc' );
+    dir_cantr_cc = fullfile( rootdir, 'tr', 'cancer_cc' );
+    dir_nortr_cc = fullfile( rootdir, 'tr', 'normal_cc' );
+    dir_bente_cc = fullfile( rootdir, 'te', 'benign_cc' );
+    dir_cante_cc = fullfile( rootdir, 'te', 'cancer_cc' );
+    dir_norte_cc = fullfile( rootdir, 'te', 'normal_cc' );
     
-    cid2name = { 'benign'; 'cancer'; 'normal'; };
+    dir_bentr_mlo = fullfile( rootdir, 'tr', 'benign_mlo' );
+    dir_cantr_mlo = fullfile( rootdir, 'tr', 'cancer_mlo' );
+    dir_nortr_mlo = fullfile( rootdir, 'tr', 'normal_mlo' );
+    dir_bente_mlo = fullfile( rootdir, 'te', 'benign_mlo' );
+    dir_cante_mlo = fullfile( rootdir, 'te', 'cancer_mlo' );
+    dir_norte_mlo = fullfile( rootdir, 'te', 'normal_mlo' );
 
-    iid2impath_bentr = dir( dir_bentr );
-    iid2impath_bentr = fullfile( dir_bentr, { iid2impath_bentr( 3 : end ).name }' );
-    iid2impath_cantr = dir( dir_cantr );
-    iid2impath_cantr = fullfile( dir_cantr, { iid2impath_cantr( 3 : end ).name }' );
-    iid2impath_nortr = dir( dir_nortr );
-    iid2impath_nortr = fullfile( dir_nortr, { iid2impath_nortr( 3 : end ).name }' );
+    iid2impath_bentr_cc = dir( dir_bentr_cc );
+    iid2impath_bentr_cc = fullfile( dir_bentr_cc, { iid2impath_bentr_cc( 3 : end ).name }' );
+    iid2impath_cantr_cc = dir( dir_cantr_cc );
+    iid2impath_cantr_cc = fullfile( dir_cantr_cc, { iid2impath_cantr_cc( 3 : end ).name }' );
+    iid2impath_nortr_cc = dir( dir_nortr_cc );
+    iid2impath_nortr_cc = fullfile( dir_nortr_cc, { iid2impath_nortr_cc( 3 : end ).name }' );
+    iid2impath_bente_cc = dir( dir_bente_cc );
+    iid2impath_bente_cc = fullfile( dir_bente_cc, { iid2impath_bente_cc( 3 : end ).name }' );
+    iid2impath_cante_cc = dir( dir_cante_cc );
+    iid2impath_cante_cc = fullfile( dir_cante_cc, { iid2impath_cante_cc( 3 : end ).name }' );
+    iid2impath_norte_cc = dir( dir_norte_cc );
+    iid2impath_norte_cc = fullfile( dir_norte_cc, { iid2impath_norte_cc( 3 : end ).name }' );
     
-    iid2impath_bente = dir( dir_bente );
-    iid2impath_bente = fullfile( dir_bente, { iid2impath_bente( 3 : end ).name }' );
-    iid2impath_cante = dir( dir_cante );
-    iid2impath_cante = fullfile( dir_cante, { iid2impath_cante( 3 : end ).name }' );
-    iid2impath_norte = dir( dir_norte );
-    iid2impath_norte = fullfile( dir_norte, { iid2impath_norte( 3 : end ).name }' );
+    iid2impath_bentr_mlo = dir( dir_bentr_mlo );
+    iid2impath_bentr_mlo = fullfile( dir_bentr_mlo, { iid2impath_bentr_mlo( 3 : end ).name }' );
+    iid2impath_cantr_mlo = dir( dir_cantr_mlo );
+    iid2impath_cantr_mlo = fullfile( dir_cantr_mlo, { iid2impath_cantr_mlo( 3 : end ).name }' );
+    iid2impath_nortr_mlo = dir( dir_nortr_mlo );
+    iid2impath_nortr_mlo = fullfile( dir_nortr_mlo, { iid2impath_nortr_mlo( 3 : end ).name }' );
+    iid2impath_bente_mlo = dir( dir_bente_mlo );
+    iid2impath_bente_mlo = fullfile( dir_bente_mlo, { iid2impath_bente_mlo( 3 : end ).name }' );
+    iid2impath_cante_mlo = dir( dir_cante_mlo );
+    iid2impath_cante_mlo = fullfile( dir_cante_mlo, { iid2impath_cante_mlo( 3 : end ).name }' );
+    iid2impath_norte_mlo = dir( dir_norte_mlo );
+    iid2impath_norte_mlo = fullfile( dir_norte_mlo, { iid2impath_norte_mlo( 3 : end ).name }' );
     
     iid2impath = cat( 1, ...
-        iid2impath_bentr, iid2impath_cantr, iid2impath_nortr, ...
-        iid2impath_bente, iid2impath_cante, iid2impath_norte );
+        iid2impath_bentr_cc, iid2impath_cantr_cc, iid2impath_nortr_cc, ...
+        iid2impath_bente_cc, iid2impath_cante_cc, iid2impath_norte_cc, ...
+        iid2impath_bentr_mlo, iid2impath_cantr_mlo, iid2impath_nortr_mlo, ...
+        iid2impath_bente_mlo, iid2impath_cante_mlo, iid2impath_norte_mlo );
     
     numIm = numel( iid2impath );
     iid2size = zeros( 2, numIm );
@@ -41,33 +61,49 @@ function [ cid2name, iid2impath, iid2size, iid2setid, oid2cid, oid2diff, oid2iid
         iid2size( :, iid ) = [ r; c; ];
     end
     
-    oid2cid_bentr = 1 * ones( size( iid2impath_bentr ) );
-    oid2cid_cantr = 2 * ones( size( iid2impath_cantr ) );
-    oid2cid_nortr = 3 * ones( size( iid2impath_nortr ) );
+    oid2cid_bentr_cc = 1 * ones( size( iid2impath_bentr_cc ) );
+    oid2cid_cantr_cc = 2 * ones( size( iid2impath_cantr_cc ) );
+    oid2cid_nortr_cc = 3 * ones( size( iid2impath_nortr_cc ) );
+    oid2cid_bente_cc = 1 * ones( size( iid2impath_bente_cc ) );
+    oid2cid_cante_cc = 2 * ones( size( iid2impath_cante_cc ) );
+    oid2cid_norte_cc = 3 * ones( size( iid2impath_norte_cc ) );
     
-    oid2cid_bente = 1 * ones( size( iid2impath_bente ) );
-    oid2cid_cante = 2 * ones( size( iid2impath_cante ) );
-    oid2cid_norte = 3 * ones( size( iid2impath_norte ) );
+    oid2cid_bentr_mlo = 4 * ones( size( iid2impath_bentr_mlo ) );
+    oid2cid_cantr_mlo = 5 * ones( size( iid2impath_cantr_mlo ) );
+    oid2cid_nortr_mlo = 6 * ones( size( iid2impath_nortr_mlo ) );
+    oid2cid_bente_mlo = 4 * ones( size( iid2impath_bente_mlo ) );
+    oid2cid_cante_mlo = 5 * ones( size( iid2impath_cante_mlo ) );
+    oid2cid_norte_mlo = 6 * ones( size( iid2impath_norte_mlo ) );
     
     oid2cid = cat( 1, ...
-        oid2cid_bentr, oid2cid_cantr, oid2cid_nortr, ...
-        oid2cid_bente, oid2cid_cante, oid2cid_norte );
+        oid2cid_bentr_cc, oid2cid_cantr_cc, oid2cid_nortr_cc, ...
+        oid2cid_bente_cc, oid2cid_cante_cc, oid2cid_norte_cc, ...
+        oid2cid_bentr_mlo, oid2cid_cantr_mlo, oid2cid_nortr_mlo, ...
+        oid2cid_bente_mlo, oid2cid_cante_mlo, oid2cid_norte_mlo );
     
     oid2diff = false( numIm, 1 );
     oid2iid = ( 1 : numIm )';
     oid2bbox = cat( 1, ones( 2, numIm ), iid2size );
 
-    iid2setid_bentr = 1 * ones( size( iid2impath_bentr ) );
-    iid2setid_cantr = 1 * ones( size( iid2impath_cantr ) );
-    iid2setid_nortr = 1 * ones( size( iid2impath_nortr ) );
+    iid2setid_bentr_cc = 1 * ones( size( iid2impath_bentr_cc ) );
+    iid2setid_cantr_cc = 1 * ones( size( iid2impath_cantr_cc ) );
+    iid2setid_nortr_cc = 1 * ones( size( iid2impath_nortr_cc ) );
+    iid2setid_bente_cc = 2 * ones( size( iid2impath_bente_cc ) );
+    iid2setid_cante_cc = 2 * ones( size( iid2impath_cante_cc ) );
+    iid2setid_norte_cc = 2 * ones( size( iid2impath_norte_cc ) );
     
-    iid2setid_bente = 2 * ones( size( iid2impath_bente ) );
-    iid2setid_cante = 2 * ones( size( iid2impath_cante ) );
-    iid2setid_norte = 2 * ones( size( iid2impath_norte ) );
+    iid2setid_bentr_mlo = 1 * ones( size( iid2impath_bentr_mlo ) );
+    iid2setid_cantr_mlo = 1 * ones( size( iid2impath_cantr_mlo ) );
+    iid2setid_nortr_mlo = 1 * ones( size( iid2impath_nortr_mlo ) );
+    iid2setid_bente_mlo = 2 * ones( size( iid2impath_bente_mlo ) );
+    iid2setid_cante_mlo = 2 * ones( size( iid2impath_cante_mlo ) );
+    iid2setid_norte_mlo = 2 * ones( size( iid2impath_norte_mlo ) );
     
     iid2setid = cat( 1, ...
-        iid2setid_bentr, iid2setid_cantr, iid2setid_nortr, ...
-        iid2setid_bente, iid2setid_cante, iid2setid_norte );
+        iid2setid_bentr_cc, iid2setid_cantr_cc, iid2setid_nortr_cc, ...
+        iid2setid_bente_cc, iid2setid_cante_cc, iid2setid_norte_cc, ...
+        iid2setid_bentr_mlo, iid2setid_cantr_mlo, iid2setid_nortr_mlo, ...
+        iid2setid_bente_mlo, iid2setid_cante_mlo, iid2setid_norte_mlo );
 
 end
 
