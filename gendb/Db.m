@@ -14,6 +14,7 @@ classdef Db < handle
         oid2diff;
         oid2iid;
         oid2bbox;
+        oid2cont;
     end
     methods
         function this = Db( setting, dstDir )
@@ -40,7 +41,8 @@ classdef Db < handle
                     db.oid2cid, ...
                     db.oid2diff, ...
                     db.oid2iid, ...
-                    db.oid2bbox ] = this.funh(  );
+                    db.oid2bbox, ...
+                    db.oid2cont ] = this.funh(  );
                 oid2out = 1 - db.oid2bbox( 1, : ) > 0;
                 db.oid2bbox( 1, oid2out ) = 1;
                 oid2out = 1 - db.oid2bbox( 2, : ) > 0;
@@ -80,6 +82,7 @@ classdef Db < handle
             this.oid2diff   = db.oid2diff;
             this.oid2iid    = db.oid2iid;
             this.oid2bbox   = single( round( db.oid2bbox ) );
+            this.oid2cont   = db.oid2cont;
         end
         function numClass = getNumClass( this )
             numClass = length( this.cid2name );
@@ -116,6 +119,7 @@ classdef Db < handle
         end
         function cid2idxs = getCid2idxs( this, idx2iid )
             idx2cids = this.iid2cids( idx2iid );
+            idx2cids = idx2cids( : );
             idxthread = cellfun( @( x, y ) y * ones( size( x ) ), ...
                 idx2cids, num2cell( 1 : numel( idx2cids ) )', ...
                 'UniformOutput', false );
@@ -156,6 +160,7 @@ classdef Db < handle
             db.oid2diff = this.oid2diff;
             db.oid2iid = this.oid2iid;
             db.oid2bbox = this.oid2bbox;
+            db.oid2cont = this.oid2cont;
             db.iid2oids = arrayfun( ...
                 @( iid )find( db.oid2iid == iid ), ...
                 1 : numel( db.iid2setid ), ...
@@ -184,6 +189,7 @@ classdef Db < handle
             newdb.oid2diff   = db.oid2diff;
             newdb.oid2iid    = db.oid2iid;
             newdb.oid2bbox   = db.oid2bbox;
+            newdb.oid2cont   = db.oid2cont;
         end
         function newdb = reduceDbByCls( this, class )
             if isnumeric( class ), 
@@ -228,6 +234,7 @@ classdef Db < handle
             newdb.oid2iid = iid2newiid( this.oid2iid( oid2ok ) );
             newdb.oid2diff = this.oid2diff( oid2ok );
             newdb.oid2bbox = this.oid2bbox( :, oid2ok );
+            newdb.oid2cont = this.oid2cont( oid2ok );
             newdb.iid2cids = this.iid2cids( newiid2iid );
             newdb.iid2cids = cellfun( ...
                 @( cid )cid2newcid( cid( cid2newcid( cid ) ~= 0 ) ), ...

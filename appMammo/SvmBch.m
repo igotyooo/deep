@@ -2,7 +2,7 @@ classdef SvmBch < handle
     properties
         srcDb;
         srcImDscrber;
-        prll;
+        result;
         setting;
     end    
     methods
@@ -153,7 +153,8 @@ classdef SvmBch < handle
         % Functions for evaluation metrics.
         function metric = computeTopAcc( this, idx2cscore, topn )
             idx2iid = this.srcDb.getTeiids;
-            idx2cid = cell2mat( this.srcDb.iid2gt( idx2iid ) );
+            idx2cid = cell2mat( this.srcDb.iid2cids( idx2iid ) );
+            idx2cid = idx2cid( : );
             [ ~, idx2topcid ] = sort( idx2cscore, 1, 'descend' );
             idx2topncid = idx2topcid( 1 : topn, : );
             idx2hit = ~prod( idx2topncid - repmat( idx2cid', topn, 1 ), 1 );
@@ -208,25 +209,24 @@ classdef SvmBch < handle
             mssg{ end + 1 } = 'TEST REPORT';
             mssg{ end + 1 } = sprintf( 'DATABASE: %s', this.srcDb.name );
             mssg{ end + 1 } = sprintf( 'IMAGE DESCRIBER: %s', this.srcImDscrber.getName );
-            mssg{ end + 1 } = sprintf( 'CLASSIFIER: %s', this.getSvmName );
-            if this.srcDb.isMutiLabel
-                % cid2ap = this.computeVocAp...
-                %     ( idx2cscore, cid2idxs, cid2didxs );
-                % mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
-                %     mean( cid2ap ) * 100 );
-                [ cid2ap, cid2ap11 ] = computeAp...
-                    ( this, idx2cscore, cid2idxs, cid2didxs );
-                mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
-                    mean( cid2ap ) * 100 );
-                mssg{ end + 1 } = sprintf( 'MAP11: %.2f%%', ...
-                    mean( cid2ap11 ) * 100 );
-            else
-                mssg{ end + 1 } = sprintf( 'TOP1 ACCURACY: %.2f%%', ...
-                    this.computeTopAcc( idx2cscore, 1 ) * 100 );
+            mssg{ end + 1 } = sprintf( 'CLASSIFIER: %s', this.getName );
+            % cid2ap = this.computeVocAp...
+            %     ( idx2cscore, cid2idxs, cid2didxs );
+            % mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
+            %     mean( cid2ap ) * 100 );
+            [ this.result.cid2ap, this.result.cid2ap11 ] = computeAp...
+                ( this, idx2cscore, cid2idxs, cid2didxs );
+            mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
+                mean( this.result.cid2ap ) * 100 );
+            mssg{ end + 1 } = sprintf( 'MAP11: %.2f%%', ...
+                mean( this.result.cid2ap11 ) * 100 );
+            if ~this.srcDb.isMutiLabel
+                this.result.top1 = this.computeTopAcc( idx2cscore, 1 ) * 100;
+                mssg{ end + 1 } = sprintf( 'TOP1 ACCURACY: %.2f%%', this.result.top1 );
             end
         end
         % Functions for data I/O.
-        function name = getSvmName( this )
+        function name = getName( this )
             name = sprintf( 'SB_%s_OF_%s', ...
                 this.setting.changes, ...
                 this.srcImDscrber.getName );
@@ -234,7 +234,7 @@ classdef SvmBch < handle
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getDir( this )
-            name = this.getSvmName;
+            name = this.getName;
             if length( name ) > 150, 
                 name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) ); 
                 name = sprintf( '%010d', name ); 

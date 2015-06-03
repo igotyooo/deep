@@ -91,12 +91,6 @@ classdef NeuralRegnDscrberMammo < handle
                 if saveData,
                     save( fpath, 'rid2geo', 'rid2desc', 'imsize' ); end;
             end
-            if ~isempty( this.settingDesc.regionFiltering )
-                im = imread( this.srcDb.iid2impath{ iid } );
-                rid2ok = this.settingDesc.regionFiltering( im, rid2geo );
-                rid2geo = rid2geo( :, rid2ok );
-                rid2desc = rid2desc( :, rid2ok );
-            end
             rid2desc = nmlzVecs...
                 ( rid2desc, normAfterPca );
         end
@@ -114,11 +108,6 @@ classdef NeuralRegnDscrberMammo < handle
             if ~isempty( this.pca )
                 rid2desc = this.pca.proj * ...
                     bsxfun( @minus, rid2desc, this.pca.center );
-            end
-            if ~isempty( this.settingDesc.regionFiltering )
-                rid2ok = this.settingDesc.regionFiltering( im, rid2geo );
-                rid2geo = rid2geo( :, rid2ok );
-                rid2desc = rid2desc( :, rid2ok );
             end
             rid2desc = nmlzVecs...
                 ( rid2desc, normAfterPca );

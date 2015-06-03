@@ -9,18 +9,30 @@ classdef FisherMammo < handle
             this.srcRegnDscrber             = srcRegnDscrber;
             this.setting.normalizeByScale   = true;
             this.setting.spatialPyramid     = '11';
+            this.setting.regionFiltering    = '';
             this.setting = setChanges...
                 ( this.setting, setting, upper( mfilename ) );
         end
         function fisher = iid2desc( this, iid )
             [ rid2geo, rid2desc, imsize ] = ...
                 this.srcRegnDscrber.iid2regdesc( iid, false );
+            if ~isempty( this.setting.regionFiltering )
+                im = imread( this.srcDb.iid2impath{ iid } );
+                rid2ok = this.setting.regionFiltering( im, rid2geo );
+                rid2geo = rid2geo( :, rid2ok );
+                rid2desc = rid2desc( :, rid2ok );
+            end
             fisher = this.encodeSpFisher...
                 ( rid2geo, rid2desc, imsize );
         end
         function fisher = im2desc( this, im )
             [ rid2geo, rid2desc, imsize ] = ...
                 this.srcRegnDscrber.im2regdesc( im );
+            if ~isempty( this.setting.regionFiltering )
+                rid2ok = this.setting.regionFiltering( im, rid2geo );
+                rid2geo = rid2geo( :, rid2ok );
+                rid2desc = rid2desc( :, rid2ok );
+            end
             fisher = this.encodeSpFisher...
                 ( rid2geo, rid2desc, imsize );
         end
@@ -85,6 +97,45 @@ classdef FisherMammo < handle
             end
             fisher = kernelMap( fisher, 'HELL' );
             fisher = nmlzVecs( fisher, 'L2' );
+        end
+        function [ rid2geo, rid2fisher, imsize ] = iid2descNoAp( this, iid )
+            [ rid2geo, rid2desc, imsize ] = ...
+                this.srcRegnDscrber.iid2regdesc( iid, false );
+            if ~isempty( this.setting.regionFiltering )
+                im = imread( this.srcDb.iid2impath{ iid } );
+                rid2ok = this.setting.regionFiltering( im, rid2geo );
+                rid2geo = rid2geo( :, rid2ok );
+                rid2desc = rid2desc( :, rid2ok );
+            end
+            numRegn = size( rid2geo, 2 );
+            means = this.srcRegnDscrber.gmm.means;
+            covs = this.srcRegnDscrber.gmm.covs;
+            priors = this.srcRegnDscrber.gmm.priors;
+            fisherDim = 2 * size( rid2desc, 1 ) * size( means, 2 );
+            rid2fisher = vl_fisher...
+                ( rid2desc, means, covs, priors, 'NoAveragePooling' );
+            rid2fisher = reshape( rid2fisher, [ fisherDim, numRegn ] );
+            rid2fisher = kernelMap( rid2fisher, 'HELL' );
+            rid2fisher = nmlzVecs( rid2fisher, 'L2' );
+        end
+        function [ rid2geo, rid2fisher, imsize ] = im2descNoAp( this, im )
+            [ rid2geo, rid2desc, imsize ] = ...
+                this.srcRegnDscrber.im2regdesc( im, false );
+            if ~isempty( this.setting.regionFiltering )
+                rid2ok = this.setting.regionFiltering( im, rid2geo );
+                rid2geo = rid2geo( :, rid2ok );
+                rid2desc = rid2desc( :, rid2ok );
+            end
+            numRegn = size( rid2geo, 2 );
+            means = this.srcRegnDscrber.gmm.means;
+            covs = this.srcRegnDscrber.gmm.covs;
+            priors = this.srcRegnDscrber.gmm.priors;
+            fisherDim = 2 * size( rid2desc, 1 ) * size( means, 2 );
+            rid2fisher = vl_fisher...
+                ( rid2desc, means, covs, priors, 'NoAveragePooling' );
+            rid2fisher = reshape( rid2fisher, [ fisherDim, numRegn ] );
+            rid2fisher = kernelMap( rid2fisher, 'HELL' );
+            rid2fisher = nmlzVecs( rid2fisher, 'L2' );
         end
         % Functions for object identification.
         function name = getName( this )
