@@ -63,7 +63,7 @@ close all; clearvars -except cnn db fisher imDscrber neuralRegnDscrber path sett
 targetCid = 1;
 iids = db.getTeiids;
 iids = iids( cell2mat( db.iid2cids( iids ) ) == targetCid );
-iid = randsample( iids, 1 ); % 4644; 4684; 2726;
+iid = 4588; % randsample( iids, 1 ); % 4644; 4684; 2726;
 oids = db.iid2oids{ iid };
 im = imread( db.iid2impath{ iid } );
 [ r, c, ~ ] = size( im );
