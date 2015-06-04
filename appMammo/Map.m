@@ -8,14 +8,16 @@ classdef Map < handle
     methods
         function this = Map...
                 ( srcDb, srcSvm, settingPre, settingPost )
-            this.srcDb                  = srcDb;
-            this.srcSvm                 = srcSvm;
-            this.settingPre.scoreThrsh  = 0.0;
-            this.settingPre.mapMaxSide  = 500;
-            this.settingPost.weightByIm = false;
-            this.settingPost.smoothMap  = 5;
-            this.settingPost.smoothIm   = 10;
-            this.settingPost.mapMaxVal  = 50;
+            this.srcDb                      = srcDb;
+            this.srcSvm                     = srcSvm;
+            this.settingPre.scoreThrsh      = 0.0;
+            this.settingPre.mapMaxSide      = 500;
+            this.settingPost.weightByIm     = false;
+            this.settingPost.smoothMap      = 5;
+            this.settingPost.smoothIm       = 10;
+            this.settingPost.cid2scaling    = ones( size( this.srcDb.cid2name ) );
+            this.settingPost.mapMaxVal      = 17;
+            this.settingPost.mapThrsh       = 10;
             this.settingPre = setChanges...
                 ( this.settingPre, settingPre, upper( mfilename ) );
             this.settingPost = setChanges...
@@ -50,29 +52,29 @@ classdef Map < handle
                     'Desc im regns.', cummt );
             end
         end
-        function cid2map = iid2map( this, iid )
+        function map = iid2map( this, iid )
             mpath = this.getPath( iid );
             try
                 data = load( mpath );
-                cid2map = data.cid2map;
+                map = data.map;
             catch
-                cid2map = this.genMap( iid );
-                save( mpath, 'cid2map' );
+                [ map.cid2map, map.cid2rid2score, map.rid2geo ] = this.genMap( iid );
+                save( mpath, 'map' );
             end
             % Post-processing.
             if nargout,
                 im = imread( this.srcDb.iid2impath{ iid } );
-                [ cid2map, cid2cont ] = this.postProcMap( im, cid2map );
+                [ map.cid2map, map.cid2cont ] = this.postProcMap( im, map.cid2map );
             end
         end
-        function cid2map = im2map( this, im )
-            cid2map = this.genMap( im );
+        function map = im2map( this, im )
+            [ map.cid2map, map.cid2rid2score, map.rid2geo ] = this.genMap( im );
             % Post-processing.
             if nargout,
-                [ cid2map, cid2cont ] = this.postProcMap( im, cid2map );
+                [ map.cid2map, map.cid2cont ] = this.postProcMap( im, map.cid2map );
             end
         end
-        function cid2map = genMap( this, src )
+        function [ cid2map, cid2rid2score, rid2geo ] = genMap( this, src )
             if numel( src ) == 1,
                 iid = src;
                 im = imread( this.srcDb.iid2impath{ iid } );
@@ -123,19 +125,21 @@ classdef Map < handle
                     cid2map{ cid }( r1 : r2, c1 : c2 ) + 1;
             end;
         end
-        function [ cid2map, cid2cont ] = postProcMap( this, im, cid2map )
-            cid2scaling = [ 5, 3, 0 ];
+        function [ cid2map, cid2did2cont ] = postProcMap( this, im, cid2map )
             weightByIm = this.settingPost.weightByIm;
             smoothMap = this.settingPost.smoothMap;
             smoothIm = this.settingPost.smoothIm;
+            cid2scaling = this.settingPost.cid2scaling;
             mapMaxVal = this.settingPost.mapMaxVal;
+            mapThrsh = this.settingPost.mapThrsh;
             mapMaxSide = max( size( cid2map{ 1 } ) );
             numCls = numel( cid2map );
+            cid2did2cont = cell( size( cid2map ) );
             for cid = 1 : numCls,
                 map = cid2map{ cid };
+                imSize = size( im );
                 if smoothMap, map = vl_imsmooth( map, smoothMap ); end;
                 if weightByIm,
-                    imSize = size( im );
                     imMaxSide = max( imSize( 1 : 2 ) );
                     im_ = imresize( im, mapMaxSide ./ imMaxSide );
                     im_ = single( mean( im_, 3 ) / 255 );
@@ -148,9 +152,11 @@ classdef Map < handle
                 imMap = imresize( imMap, imSize( 1 : 2 ) );
                 cid2map{ cid } = imMap;
                 % Detect contours.
-                
+                map = imresize( map, imSize( 1 : 2 ) );
+                cont = round( imcontour( map, [ mapThrsh, mapThrsh ] ) );
+                cont = splitContour( cont );
+                cid2did2cont{ cid } = cont;
             end
-            cid2cont = '';
         end
         % Functions for data I/O.
         function name = getName( this )
