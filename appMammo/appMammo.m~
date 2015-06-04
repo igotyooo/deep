@@ -7,7 +7,7 @@ setting.db                              = path.db.ddsm;
 setting.cnn                             = path.net.ddsm;
 setting.neuralRegnDesc.layerId          = 19;
 setting.neuralRegnDesc.maxSides         = [ 3000, 2500, 2000 ];
-setting.neuralRegnDesc.regionFiltering  = ''; % 'imThr';
+setting.neuralRegnDesc.regionFiltering  = 'imThr'; % ''; !!!!!!!!!!
 setting.neuralRegnDesc.pcaDim           = 128;
 setting.neuralRegnDesc.kernelBeforePca  = 'NONE';
 setting.neuralRegnDesc.normBeforePca    = 'L2';
@@ -31,7 +31,6 @@ setting.map.post.smoothMap              = 5;
 setting.map.post.smoothIm               = 10;
 setting.map.post.cid2scaling            = [ 1.7; 1; 0 ];
 setting.map.post.mapMaxVal              = 17;
-setting.map.post.mapThrsh               = 5;
 %% DO THE JOB.
 db = Db( setting.db, path.dstDir );
 db.genDb;
@@ -61,7 +60,7 @@ map.genMapDb;
 %% A TEST EXAMPLE AND VISUALIZATION.
 close all; clearvars -except cnn db fisher imDscrber neuralRegnDscrber path setting svm map;
 % Sample an image.
-targetCid = 2;
+targetCid = 1;
 iids = db.getTeiids;
 iids = iids( cell2mat( db.iid2cids( iids ) ) == targetCid );
 iid = randsample( iids, 1 ); % 4644; 4684; 2726;
@@ -72,16 +71,13 @@ im = imread( db.iid2impath{ iid } );
 colorGt = [ 255, 255, 0 ];
 colorBen = [ 0, 255, 0 ];
 colorCan = [ 255, 0, 0 ];
-margin = 30;
+margin = 10;
 marginIm = zeros( size( im, 1 ), margin, 3, 'uint8' );
 % Make a map.
-% mapdata = map.iid2map( iid );
-mapdata = map.im2map( im );
+mapdata = map.iid2map( iid );
 % Draw GT contour.
 for n = 1 : numel( oids ),
-    if ~isempty( db.oid2cont{ oids( n ) } )
-        im = contourOnIm( im, db.oid2cont{ oids( n ) }, colorGt );
-    end
+    im = contourOnIm( im, db.oid2cont{ oids( n ) }, colorGt );
 end;
 % Draw benign contour.
 cid = 1;
@@ -112,3 +108,4 @@ imshow( cat( 2, im, marginIm, mapdata.cid2map{ 1 }, marginIm, mapdata.cid2map{ 2
 
 
 
+cdfimor

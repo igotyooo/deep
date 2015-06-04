@@ -183,6 +183,14 @@ classdef NeuralRegnDscrberMammo < handle
             % Aggregate for each layer.
             rid2desc = cat( 2, sid2rid2desc{ : } );
             rid2geo = cat( 2, sid2rid2geo{ : } );
+            % Filtering.
+            regionFiltering = this.settingDesc.regionFiltering;
+            if ~isempty( regionFiltering )
+                regionFiltering = str2func( regionFiltering );
+                rid2ok = regionFiltering( im, rid2geo );
+                rid2geo = rid2geo( :, rid2ok );
+                rid2desc = rid2desc( :, rid2ok );
+            end;
         end
         function descs = sampleDescs( this )
             fpath = this.getSmplDescPath;
@@ -272,10 +280,19 @@ classdef NeuralRegnDscrberMammo < handle
         end
         % Functions for sample descriptor I/O.
         function name = getSmplDescName( this )
-            name = sprintf( 'NRDMSMPL_LI%d_MS%s_OF_%s', ...
-                this.settingDesc.layerId, ...
-                mat2str( this.settingDesc.maxSides ), ...
-                this.srcCnn.name );
+            regionFiltering = this.settingDesc.regionFiltering;
+            if isempty( regionFiltering )
+                name = sprintf( 'NRDMSMPL_LI%d_MS%s_OF_%s', ...
+                    this.settingDesc.layerId, ...
+                    mat2str( this.settingDesc.maxSides ), ...
+                    this.srcCnn.name );
+            else
+                name = sprintf( 'NRDMSMPL_LI%d_MS%s_RF%s_OF_%s', ...
+                    this.settingDesc.layerId, ...
+                    mat2str( this.settingDesc.maxSides ), ...
+                    upper( regionFiltering ), ...
+                    this.srcCnn.name );
+            end
             name( strfind( name, '__' ) ) = '';
         end
         function dir = getSmplDescDir( this )

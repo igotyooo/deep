@@ -49,7 +49,7 @@ classdef Map < handle
                 cnt = cnt + 1;
                 fprintf( '%s: ', upper( mfilename ) );
                 disploop( numIm, cnt, ...
-                    'Desc im regns.', cummt );
+                    'Compute a map.', cummt );
             end
         end
         function map = iid2map( this, iid )
@@ -115,12 +115,12 @@ classdef Map < handle
                 ( 1 : numCls )', 'UniformOutput', false );
             rid2ok = ( rank2rid2score( 1, : ) > scoreThrsh )';
             rank2rid2cid = rank2rid2cid( :, rid2ok );
-            rid2geo = rid2geo( :, rid2ok );
-            numRegn = size( rid2geo, 2 );
+            rid2geo_ = rid2geo( :, rid2ok );
+            numRegn = size( rid2geo_, 2 );
             for rid = 1 : numRegn,
                 cid = rank2rid2cid( 1, rid );
-                r1 = rid2geo( 1, rid ); c1 = rid2geo( 2, rid );
-                r2 = rid2geo( 3, rid ); c2 = rid2geo( 4, rid );
+                r1 = rid2geo_( 1, rid ); c1 = rid2geo_( 2, rid );
+                r2 = rid2geo_( 3, rid ); c2 = rid2geo_( 4, rid );
                 cid2map{ cid }( r1 : r2, c1 : c2 ) = ...
                     cid2map{ cid }( r1 : r2, c1 : c2 ) + 1;
             end;
