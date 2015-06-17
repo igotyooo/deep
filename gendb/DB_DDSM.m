@@ -107,23 +107,38 @@ function [ cid2name, iid2impath, iid2size, iid2setid, oid2cid, oid2diff, oid2iid
             data = load( contpath );
             cont = data.imct;
             cont = splitContour( cont );
-            numObj = numel( cont );
-            % Make oid2cid.
-            oid2cid{ iid } = cid * ones( numObj, 1 );
-            % Make oid2diff.
-            oid2diff{ iid } = false( numObj, 1 );
-            % Make oid2iid.
-            oid2iid{ iid } = iid * ones( numObj, 1 );
-            % Make oid2cont.
-            for n = 1 : numObj, 
+            if isempty( cont )
+                % Make oid2cid.
+                oid2cid{ iid } = cid;
+                % Make oid2diff.
+                oid2diff{ iid } = false;
+                % Make oid2iid.
+                oid2iid{ iid } = iid;
+                % Make oid2cont.
                 oid = oid + 1;
-                oid2cont{ oid } = cont{ n };
+                oid2cont{ oid } = [  ];
+                % Make oid2bbox.
+                oid2bbox{ iid } = [ 1; 1; r; c; ];
+                fprintf( ' No contour.\n' );
+            else
+                numObj = numel( cont );
+                % Make oid2cid.
+                oid2cid{ iid } = cid * ones( numObj, 1 );
+                % Make oid2diff.
+                oid2diff{ iid } = false( numObj, 1 );
+                % Make oid2iid.
+                oid2iid{ iid } = iid * ones( numObj, 1 );
+                % Make oid2cont.
+                for n = 1 : numObj,
+                    oid = oid + 1;
+                    oid2cont{ oid } = cont{ n };
+                end
+                % Make oid2bbox.
+                bbox = zeros( 4, numObj );
+                for n = 1 : numObj, bbox( :, n ) = contour2bbox( cont{ n } ); end;
+                oid2bbox{ iid } = bbox;
+                fprintf( '\n' );
             end
-            % Make oid2bbox.
-            bbox = zeros( 4, numObj );
-            for n = 1 : numObj, bbox( :, n ) = contour2bbox( cont{ n } ); end;
-            oid2bbox{ iid } = bbox;
-            fprintf( '\n' );
         catch
             % Make oid2cid.
             oid2cid{ iid } = cid;

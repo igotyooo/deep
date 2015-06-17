@@ -61,7 +61,7 @@ map.genMapDb;
 %% A TEST EXAMPLE AND VISUALIZATION.
 close all; clearvars -except cnn db fisher imDscrber neuralRegnDscrber path setting svm map;
 % Sample an image.
-targetCid = 2;
+targetCid = 3;
 iids = db.getTeiids;
 iids = iids( cell2mat( db.iid2cids( iids ) ) == targetCid );
 iid = randsample( iids, 1 ); % 4644; 4684; 2726;
@@ -75,8 +75,8 @@ colorCan = [ 255, 0, 0 ];
 margin = 30;
 marginIm = zeros( size( im, 1 ), margin, 3, 'uint8' );
 % Make a map.
-% mapdata = map.iid2map( iid );
-mapdata = map.im2map( im );
+mapdata = map.iid2map( iid );
+% mapdata = map.im2map( im );
 % Draw GT contour.
 for n = 1 : numel( oids ),
     if ~isempty( db.oid2cont{ oids( n ) } )

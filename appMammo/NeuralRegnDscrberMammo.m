@@ -133,9 +133,10 @@ classdef NeuralRegnDscrberMammo < handle
             sid2rid2geo = cell( numScale, 1 );
             sid2rid2desc = cell( numScale, 1 );
             for sid = 1 : numScale
-                if abs( sid2maxSide( sid ) / imMaxSide - 1 ) > 0.001
+                maxSide = sid2maxSide( sid );
+                if abs( maxSide / imMaxSide - 1 ) > 0.001
                     im_ = imresize( im, ...
-                        sid2maxSide( sid ) / imMaxSide, ...
+                        maxSide / imMaxSide, ...
                         'method', itpltn );
                 else
                     im_ = im;
@@ -166,7 +167,7 @@ classdef NeuralRegnDscrberMammo < handle
                 % Form geometries.
                 stride = 32; % It is not general!!!
                 [ cs, rs ] = meshgrid( 1 : c, 1 : r );
-                geo = cat( 3, rs, cs, rs, cs, patchsize * ones( r, c ) );
+                geo = cat( 3, rs, cs, rs, cs, sid * ones( r, c ) );
                 [ r, c, z ] = size( geo );
                 depthid = ( ( ( 1 : z ) - 1 ) * ( r * c ) )';
                 rcid = 1 : ( r * c );
