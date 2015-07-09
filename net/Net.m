@@ -1,11 +1,13 @@
-classdef Cnn < handle
+classdef Net < handle
     properties
         srcInOut;
-        initCnnName;
+        initNetName;
         currentEpch;
         isinit;
         imStats;
         layers;
+        classes;
+        normalization;
         eid2energyTr;
         eid2energyVal;
         eid2metricTr;
@@ -17,11 +19,11 @@ classdef Cnn < handle
     % Public interface. The following functions are used only. %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods( Access = public )
-        function this = Cnn( srcInOut, setting )
+        function this = Net( srcInOut, setting )
             this.srcInOut                           = srcInOut;
-            this.initCnnName                        = 'RND';
+            this.initNetName                        = 'RND';
             this.currentEpch                        = 0;
-            this.setting.normalizeImage             = true;
+            this.setting.normalizeImage             = 'RGBMEAN'; % 'AVGIM';
             this.setting.weightDecay                = 0.0005;
             this.setting.momentum                   = 0.9;
             this.setting.modelType                  = 'dropout'; % 'bnorm' for batch normalization.
@@ -33,65 +35,74 @@ classdef Cnn < handle
             this.setting = setChanges...
                 ( this.setting, setting, upper( mfilename ) );
         end
-        % Initialize network.
-        function init( this, cnnName, layers, imStats_ )
-            this.initCnnName = cnnName;
-            this.layers = layers;
-            if nargin > 3, 
-                this.imStats = imStats_; 
-            elseif nargin <= 3 && this.setting.normalizeImage,
+        % 1. INITIALIZE NETWORK.
+        function init( this )
+            [ net, netName ] = this.srcInOut.provdInitNet;
+            this.initNetName = netName;
+            this.layers = net.layers;
+            this.classes = net.classes;
+            this.normalization = net.normalization;
+            if isempty( net.normalization.averageImage ),
                 this.computeImStats;
-            end;
+            end
             this.eid2energyTr = [  ];
             this.eid2metricTr = [  ];
             this.eid2energyVal = [  ];
             this.eid2metricVal = [  ];
             this.isinit = true;
         end
+        % 2. TRAIN NETWORK.
         function train( this, gpus, addrss )
             this.isinit = false;
             this.gpus = gpus;
             this.setGpus( gpus );
+            numGpus = numel( gpus );
             numEpch = numel( this.setting.learningRate );
             if this.isTrainedAt( numEpch ),
                 fprintf( '%s: Already trained. Load the model.\n', ...
                     upper( mfilename ) );
-                this.loadCnnAt( numEpch );
+                this.loadNetAt( numEpch );
                 this.currentEpch = numEpch;
                 fprintf( '%s: Done.\n', upper( mfilename ) ); return;
             end;
             % Start training.
-            rng( 0 ); ecummt = 0;
-            for epch = 1 : numEpch; etime = tic;
+            rng( 0 );
+            for epch = 1 : numEpch;
                 % Model I/O.
                 if this.isTrainedAt( epch ), continue; end;
                 if epch > 1 && this.isTrainedAt( epch - 1 ),
                     fprintf( '%s: Load the model of epch %d.\n', ...
                         upper( mfilename ), epch - 1 );
-                    this.loadCnnAt( epch - 1 );
+                    this.loadNetAt( epch - 1 );
                     this.currentEpch = epch - 1;
                 end
                 % Copy layers.
                 net.layers = this.layers;
                 % Fetch network on gpu.
-                if numGpus, net = this.fetchNetOnGpu( net ); end;
+                if numGpus, net = this.fetchNetOnGpu( net, gpus ); end;
                 % Training at this epoch.
                 if numGpus <= 1,
                     % Train net.
                     [ net, energyTr, metricTr ] = ...
-                        this.trainAt( net, epch );
+                        this.trainAnEpch( net );
                     % Evaluate net.
+                    [ energyVal, metricVal ] = ...
+                        this.evaluate( net );
                 else % Multi-gpu mode.
                     spmd( numGpus ),
                         % Train net.
                         [ net, energyTr, metricTr ] = ...
-                            this.trainAt( net, epch );
+                            this.trainAnEpch( net );
                         % Evaluate net.
+                        [ energyVal, metricVal ] = ...
+                            this.evaluate( net );
                     end;
-                    energyTr = sum( cell2mat( energyTr ) );
-                    metricTr = sum( cell2mat( metricTr ) );
+                    energyTr = sum( [ energyTr{ : } ] );
+                    metricTr = sum( [ metricTr{ : } ] );
+                    energyVal = sum( [ energyVal{ : } ] );
+                    metricVal = sum( [ metricVal{ : } ] );
                 end;
-                this.currentEpch = epch; 
+                this.currentEpch = epch;
                 % Fetch network on cpu.
                 if numGpus <= 1,
                     net = vl_simplenn_move( net, 'cpu' );
@@ -105,76 +116,76 @@ classdef Cnn < handle
                 % Update statistics.
                 batchSize = this.srcInOut.getBatchSize;
                 numBchTr = this.srcInOut.getNumBatchTr;
+                numBchVal = this.srcInOut.getNumBatchVal;
                 this.eid2energyTr( end + 1 ) = energyTr / ( batchSize * numBchTr );
                 this.eid2metricTr( end + 1 ) = metricTr / ( batchSize * numBchTr );
+                this.eid2energyVal( end + 1 ) = energyVal / ( batchSize * numBchVal );
+                this.eid2metricVal( end + 1 ) = metricVal / ( batchSize * numBchVal );
                 % Save.
                 fprintf( '%s: Save net at epch %d.\n', ...
                     upper( mfilename ), epch );
-                this.saveCnnAt( epch );
+                this.saveNetAt( epch );
                 fprintf( '%s: Done.\n', upper( mfilename ) );
                 this.saveFigAt( epch );
                 this.saveFiltImAt( epch );
                 % Report.
                 attch{ 1 } = this.getFigPath( epch );
-                for lyid = this.getVisFiltLyers( this.layers ),
-                    attch{ end + 1 } = this.getFiltImPath( lyid, epch ); end;
+                for lid = this.getVisFiltLyers( this.layers ),
+                    attch{ end + 1 } = this.getFiltImPath( lid, epch ); end;
                 this.reportTrainStatus( attch, addrss ); clear attch;
-                ecummt = ecummt + toc( etime );
-            end % Go to next epoch.
+            end; % Go to next epoch.
         end
-        function fetchBestCnn( this, smoothFactor )
+        % 3. FETCH THE BEST NETWORK.
+        function fetchBestNet( this )
             epch2perf = this.eid2metricVal;
-            numEpch = numel( epch2perf );
-            filtSize = floor( numEpch / smoothFactor ); 
-            pad = floor( filtSize / 2 );
-            if ~mod( filtSize, 2 ), filtSize = filtSize - 1; end; % Should be odd.
-            epch2perfSmooth = cat( 2, ...
-                epch2perf( 1 ) * ones( 1, pad ), ...
-                epch2perf, epch2perf( end ) * ones( 1, pad ) );
-            filter = ones( 1, filtSize );
-            epch2perfSmooth = conv( epch2perfSmooth, filter, 'valid' ) / filtSize;
-            [ ~, bestEpch ] = min( epch2perfSmooth );
+            [ bestMetric, bestEpch ] = min( epch2perf );
             bestTsMetricVal = epch2perf( bestEpch );
             tsMetricName = this.srcInOut.getTsMetricName;
             fprintf( ...
-                '%s: Load cnn of epch %d. (%s of %.4f)\n', ...
+                '%s: Load net of epch %d. (%s of %.4f)\n', ...
                 upper( mfilename ), ...
                 bestEpch, ...
                 upper( tsMetricName ), ...
                 bestTsMetricVal );
-            this.loadCnnAt( bestEpch );
+            this.loadNetAt( bestEpch );
             this.currentEpch = bestEpch;
             fprintf( '%s: Fetch done.\n', ...
                 upper( mfilename ) );
-            plot( 1 : numel( epch2perf ), epch2perf, 'b-' ); hold on;
-            plot( 1 : numel( epch2perf ), epch2perfSmooth, 'r-' ); hold off;
+            plot( 1 : numel( epch2perf ), epch2perf, 'b.-' ); hold on;
+            plot( bestEpch, bestMetric, 'ro' ); hold off;
+            set( gcf, 'color', 'w' );
+            xlabel( 'Epoch' );
+            ylabel( tsMetricName );
+            legend( { 'Val', 'Net selected' } );
+            grid on;
         end
-        % Function for identificatioin.
-        function name = getCnnName( this )
-            if strcmp( this.initCnnName, 'RND' )
-                name = sprintf( 'CNN_E%03d_%s_OF_%s', ...
+        % 3. PROVIDE CURRENT NETWORK.
+        function [ net, netName ] = provdNet( this )
+            net.layers = this.layers;
+            net.normalization = this.normalization;
+            net.classes = this.classes;
+            netName = this.getNetName;
+        end
+        % GET NETWORK NAME.
+        function name = getNetName( this )
+            if strcmp( this.initNetName, 'RND' )
+                name = sprintf( 'NET_E%03d_%s_OF_%s', ...
                     this.currentEpch, ...
                     this.setting.changes, ...
                     this.srcInOut.getName );
             else
                 if this.isinit
-                    name = sprintf( 'CNN_E%03d_%s', ...
+                    name = sprintf( 'NET_E%03d_%s', ...
                         this.currentEpch, ...
-                        this.initCnnName );
+                        this.initNetName );
                 else
-                    name = sprintf( 'CNN_E%03d_%s_STFRM_%s_OF_%s', ...
+                    name = sprintf( 'NET_E%03d_%s_STFRM_%s_OF_%s', ...
                         this.currentEpch, ...
                         this.setting.changes, ...
-                        this.initCnnName, ...
+                        this.initNetName, ...
                         this.srcInOut.getName );
                 end
             end
-            name( strfind( name, '__' ) ) = '';
-            if name( end ) == '_', name( end ) = ''; end;
-        end
-        function name = getCnnDirName( this )
-            name = this.getCnnName;
-            name( 4 : 8 ) = '';
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
@@ -212,7 +223,7 @@ classdef Cnn < handle
                 rgbCovariance = mean( cat( 3, rgbCovariance{ : } ), 3 );
                 rgbCovariance = rgbCovariance - rgbMean * rgbMean';
                 imStats.averageImage = averageImage;
-                imStats.rgbMean = rgbMean;
+                imStats.rgbMean = reshape( rgbMean, 1, 1, 3 );
                 imStats.rgbCovariance = rgbCovariance;
                 this.imStats = imStats;
                 this.makeImStatsDir;
@@ -222,14 +233,19 @@ classdef Cnn < handle
             end
             [ v, d ] = eig( this.imStats.rgbCovariance );
             this.imStats.rgbVariance = 0.1 * sqrt( d ) * v';
+            if strcmp( this.setting.normalizeImage, 'AVGIM' ),
+                this.normalization.averageImage = this.imStats.averageImage;
+            elseif strcmp( this.setting.normalizeImage, 'RGB' ),
+                this.normalization.averageImage = this.imStats.rgbMean;
+            end
         end
-        function [ net, energy, metric ] = trainAt( this, net, epch )
+        function [ net, energy, metric ] = trainAnEpch( this, net )
             % Set params.
+            epch = this.currentEpch + 1;
             numGpus = numel( this.gpus );
             normalizeImage = this.setting.normalizeImage;
             numEpch = numel( this.setting.learningRate );
             learnRate = this.setting.learningRate( epch );
-            prevLearnRate = this.setting.learningRate( max( 1, epch - 1 ) );
             weightDecay = this.setting.weightDecay;
             momentum = this.setting.momentum;
             batchSize = this.srcInOut.getBatchSize;
@@ -238,17 +254,18 @@ classdef Cnn < handle
             metric = 0;
             one = single( 1 );
             % Reset momentum if the learning rate is changed.
-            if learnRate ~= prevLearnRate,
-                fprintf('%s: Change learning rate to %f. Reset momentum.\n', ...
-                    upper( mfilename ), learnRate );
-                for l = 1 : numel( net.layers ),
-                    if ~isfield( net.layers{ l }, 'weights' ), continue; end;
-                    net.layers{ l }.filtersMomentum = ...
-                        0 * net.layers{ l }.filtersMomentum;
-                    net.layers{ l }.biasesMomentum = ...
-                        0 * net.layers{ l }.biasesMomentum;
-                end;
-            end;
+            % prevLearnRate = this.setting.learningRate( max( 1, epch - 1 ) );
+            % if learnRate ~= prevLearnRate,
+            %     fprintf('%s: Change learning rate to %f. Reset momentum.\n', ...
+            %         upper( mfilename ), learnRate );
+            %     for l = 1 : numel( net.layers ),
+            %         if ~isfield( net.layers{ l }, 'weights' ), continue; end;
+            %         net.layers{ l }.filtersMomentum = ...
+            %             0 * net.layers{ l }.filtersMomentum;
+            %         net.layers{ l }.biasesMomentum = ...
+            %             0 * net.layers{ l }.biasesMomentum;
+            %     end;
+            % end;
             % For each batch,
             res = [  ]; mmap = [  ];
             for b = 1 : numBchTr; btime = tic;
@@ -291,71 +308,64 @@ classdef Cnn < handle
                 % Print out the status.
                 btime = toc( btime );
                 fprintf( '%s: ', upper( mfilename ) );
-                fprintf( 'Epch %d/%d, Bch %d/%d, %dims/s.\n', ...
-                    epch, numEpch, b, batchSize, round( batchSize / btime ) );
+                fprintf( '(Train) Epch %d/%d, Bch %d/%d, %dims/s.\n', ...
+                    epch, numEpch, b, numBchTr, round( batchSize / btime ) );
             end; % Go to next training batch.
-            % Update the energy and task-specific evaluation metric.
         end
-        function layer = initLayer( this, config )
-            switch config.type
-                case 'conv'
-                    layer.type = config.type;
-                    layer.filters = 0.01 / ...
-                        config.initWScal * ...
-                        randn( config.filterSize, ...
-                        config.filterSize, ...
-                        config.filterDepth, ...
-                        config.numFilter, 'single' );
-                    layer.biases = config.initB * ...
-                        ones( 1, config.numFilter, 'single' );
-                    layer.stride = config.stride;
-                    layer.pad = config.pad;
-                    layer.filtersLearningRate = ...
-                        config.filtersLearningRate;
-                    layer.biasesLearningRate = ...
-                        config.biasesLearningRate;
-                    layer.filtersWeightDecay = ...
-                        config.filtersWeightDecay;
-                    layer.biasesWeightDecay = ...
-                        config.biasesWeightDecay;
-                    layer.filtersMomentum = ...
-                        zeros( 'like', layer.filters );
-                    layer.biasesMomentum = ...
-                        zeros( 'like', layer.biases );
-                case 'relu'
-                    layer.type = config.type;
-                case 'pool'
-                    layer.type = config.type;
-                    layer.method = config.method;
-                    layer.pool = ...
-                        [ config.windowSize, config.windowSize ];
-                    layer.stride = config.stride;
-                    layer.pad = config.pad;
-                case 'normalize'
-                    layer.type = config.type;
-                    layer.param = [ config.localSize, 1, ...
-                        config.alpha / config.localSize, config.beta ];
-                case 'dropout'
-                    layer.type = config.type;
-                    layer.rate = config.rate;
-                case 'softmaxloss'
-                    layer.type = config.type;
-                case 'custom'
-                    layer.type = config.type;
-                    meta = metaclass( this.srcInOut );
-                    layer.backward = str2func( strcat( meta.Name, '.backward' ) );
-                    layer.forward = str2func( strcat( meta.Name, '.forward' ) );
-            end
+        function [ energy, metric ] = evaluate( this, net )
+            % Set params.
+            epch = this.currentEpch + 1;
+            numGpus = numel( this.gpus );
+            normalizeImage = this.setting.normalizeImage;
+            numEpch = numel( this.setting.learningRate );
+            batchSize = this.srcInOut.getBatchSize;
+            numBchVal = this.srcInOut.getNumBatchVal;
+            energy = 0;
+            metric = 0;
+            % For each batch,
+            res = [  ];
+            for b = 1 : numBchVal; btime = tic;
+                % Get batch images and corrersponding GT.
+                [ ims, gts ] = this.srcInOut.provdBchVal;
+                % Put data to GPU memory.
+                if numGpus > 0, ims = gpuArray( ims ); gts = gpuArray( gts ); end;
+                % Normalize input image.
+                if normalizeImage, ims = this.normalizeIms( ims ); end;
+                % Attatch the GT to network to compute the energy.
+                net.layers{ end }.class = gts;
+                % Do forward/backward.
+                res = vl_simplenn( ...
+                    net, ims, [  ], res, ...
+                    'accumulate', false, ...
+                    'disableDropout', true, ...
+                    'conserveMemory', false, ...
+                    'backPropDepth', +inf, ...
+                    'sync', true ); % 'sync' makes things slow but on MATLAB 2014a it is necessary.
+                % Accumulate energy and task-specific evaluation metric.
+                energy = energy + ...
+                    sum( double( gather( res( end ).x ) ) );
+                metric = metric + ...
+                    this.srcInOut.computeTsMetric( res, gts );
+                % Print out the status.
+                btime = toc( btime );
+                fprintf( '%s: ', upper( mfilename ) );
+                fprintf( '(Eval) Epch %d/%d, Bch %d/%d, %dims/s.\n', ...
+                    epch, numEpch, b, numBchVal, round( batchSize / btime ) );
+            end; % Go to next training batch.
         end
         function ims = normalizeIms( this, ims )
             % Select offset type among averageImage and averageRGB.
-            % offset = this.imStats.averageImage;
-            offset = this.imStats.rgbMean;
-            rgbVar = this.imStats.rgbVariance;
-            % Normalize image.
-            for i = 1 : size( ims, 4 ),
-                offset_ = bsxfun( @plus, offset, reshape( rgbVar * randn( 3, 1 ), 1, 1, 3 ) );
-                ims( :, :, :, i ) = bsxfun( @minus, ims( :, :, :, i ), offset_ );
+            if strcmp( this.setting.normalizeImage, 'AVGIM' ),
+                ims = bsxfun( @minus, ims, this.imStats.averageImage );
+            elseif strcmp( this.setting.normalizeImage, 'RGB' ),
+                % offset = this.imStats.averageImage;
+                offset = this.imStats.rgbMean;
+                rgbVar = this.imStats.rgbVariance;
+                % Normalize image.
+                for i = 1 : size( ims, 4 ),
+                    offset_ = bsxfun( @plus, offset, reshape( rgbVar * randn( 3, 1 ), 1, 1, 3 ) );
+                    ims( :, :, :, i ) = bsxfun( @minus, ims( :, :, :, i ), offset_ );
+                end;
             end;
         end
         % Function for error plot.
@@ -396,11 +406,11 @@ classdef Cnn < handle
             mssg{ end + 1 } = '_______________';
             mssg{ end + 1 } = 'TRAINING REPORT';
             mssg{ end + 1 } = sprintf( 'DATABASE: %s', ...
-                this.srcInOut.srcDb.dbName );
+                this.srcInOut.srcDb.name );
             mssg{ end + 1 } = sprintf( 'INOUT: %s', ...
                 this.srcInOut.getName );
             mssg{ end + 1 } = sprintf( 'NET: %s', ...
-                this.getCnnDirName );
+                this.getNetDirName );
             mssg{ end + 1 } = ...
                 sprintf( 'ENERGY: %.4f%', ...
                 this.eid2energyVal( end ) );
@@ -426,72 +436,78 @@ classdef Cnn < handle
             end
         end
         % Functions for network I/O.
-        function dir = getCnnDir( this )
-            dbDir = this.srcInOut.srcDb.dir;
-            dir = fullfile( dbDir, this.getCnnDirName );
+        function name = getNetDirName( this )
+            name = this.getNetName;
+            name( 4 : 8 ) = '';
+            name( strfind( name, '__' ) ) = '';
+            if name( end ) == '_', name( end ) = ''; end;
         end
-        function dir = makeCnnDir( this )
-            dir = this.getCnnDir;
+        function dir = getNetDir( this )
+            dbDir = this.srcInOut.srcDb.dstDir;
+            dir = fullfile( dbDir, this.getNetDirName );
+        end
+        function dir = makeNetDir( this )
+            dir = this.getNetDir;
             if ~exist( dir, 'dir' ), mkdir( dir ); end;
         end
-        function fpath = getCnnPath( this, epch )
+        function fpath = getNetPath( this, epch )
             fname = sprintf...
                 ( 'E%04d.mat', epch );
             fpath = fullfile...
-                ( this.getCnnDir, fname );
+                ( this.getNetDir, fname );
         end
         function fpath = getFigPath( this, epch )
             fname = sprintf...
                 ( 'E%04d.pdf', epch );
             fpath = fullfile...
-                ( this.getCnnDir, fname );
+                ( this.getNetDir, fname );
         end
-        function fpath = getFiltImPath( this, lyid, epch )
+        function fpath = getFiltImPath( this, lid, epch )
             fname = sprintf...
-                ( 'E%04d_L%02d.jpg', epch, lyid );
+                ( 'E%04d_L%02d.jpg', epch, lid );
             fpath = fullfile...
-                ( this.getCnnDir, fname );
+                ( this.getNetDir, fname );
         end
         function is = isTrainedAt( this, epch )
-            fpath = this.getCnnPath( epch );
+            fpath = this.getNetPath( epch );
             is = exist( fpath, 'file' );
         end
-        function loadCnnAt( this, epch )
-            fpath = this.getCnnPath( epch );
+        function loadNetAt( this, epch )
+            fpath = this.getNetPath( epch );
             data = load( fpath );
-            this.layers = data.cnn.layers;
-            this.eid2energyTr = data.cnn.eid2energyTr;
-            this.eid2energyVal = data.cnn.eid2energyVal;
-            this.eid2metricTr = data.cnn.eid2metricTr;
-            this.eid2metricVal = data.cnn.eid2metricVal;
+            this.layers = data.net.layers;
+            this.eid2energyTr = data.net.eid2energyTr;
+            this.eid2energyVal = data.net.eid2energyVal;
+            this.eid2metricTr = data.net.eid2metricTr;
+            this.eid2metricVal = data.net.eid2metricVal;
         end
-        function saveCnnAt( this, epch )
-            this.makeCnnDir;
-            fpath = this.getCnnPath( epch );
-            cnn.imStats = this.imStats;
-            cnn.layers = this.layers;
-            cnn.eid2energyTr = this.eid2energyTr;
-            cnn.eid2energyVal = this.eid2energyVal;
-            cnn.eid2metricTr = this.eid2metricTr;
-            cnn.eid2metricVal = this.eid2metricVal;
-            save( fpath, 'cnn' );
+        function saveNetAt( this, epch )
+            this.makeNetDir;
+            fpath = this.getNetPath( epch );
+            net.imStats = this.imStats;
+            net.layers = this.layers;
+            net.eid2energyTr = this.eid2energyTr;
+            net.eid2energyVal = this.eid2energyVal;
+            net.eid2metricTr = this.eid2metricTr;
+            net.eid2metricVal = this.eid2metricVal;
+            save( fpath, 'net' );
         end
         function saveFigAt...
                 ( this, epch )
-            this.makeCnnDir;
+            this.makeNetDir;
             fpath = this.getFigPath( epch );
             h = this.showTrainInfoFig;
             print( h, fpath, '-dpdf' );
         end
         function saveFiltImAt( this, epch )
-            this.makeCnnDir;
-            lyids = this.getVisFiltLyers( this.layers );
-            for lyid = lyids
+            this.makeNetDir;
+            lids = this.getVisFiltLyers( this.layers );
+            for lid = lids
                 filters = gather...
-                    ( this.layers{ lyid }.weights{ 1 } );
+                    ( this.layers{ lid }.weights{ 1 } );
                 im = this.drawFilters( filters );
                 im = imresize( im, 4, 'nearest' );
-                fpath = this.getFiltImPath( lyid, epch );
+                fpath = this.getFiltImPath( lid, epch );
                 imwrite( im, fpath );
             end
         end
@@ -583,15 +599,15 @@ classdef Cnn < handle
                 end;
             end; % Go to next layer.
         end
-        function lyids = ...
+        function lids = ...
                 getVisFiltLyers( layers )
-            lyids = [  ];
+            lids = [  ];
             for l = 1 : numel( layers ),
                 if ~isfield( layers{ l }, 'weights' ), continue; end;
                 [ ~, ~, nch, ~ ] = size...
                     ( gather( layers{ l }.weights{ 1 } ) );
                 if nch == 1 || nch == 3,
-                    lyids( end + 1 ) = l;
+                    lids( end + 1 ) = l;
                 end;
             end;
         end

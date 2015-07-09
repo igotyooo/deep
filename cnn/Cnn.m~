@@ -21,6 +21,7 @@ classdef Cnn < handle
             this.srcInOut                           = srcInOut;
             this.initCnnName                        = 'RND';
             this.currentEpch                        = 0;
+            this.setting.architectureFunction       = @CFG_VL;
             this.setting.normalizeImage             = true;
             this.setting.weightDecay                = 0.0005;
             this.setting.momentum                   = 0.9;
@@ -51,7 +52,7 @@ classdef Cnn < handle
         function train( this, gpus, addrss )
             this.isinit = false;
             this.gpus = gpus;
-            this.setGpus( gpus );
+            this.setGpus;
             numEpch = numel( this.setting.learningRate );
             if this.isTrainedAt( numEpch ),
                 fprintf( '%s: Already trained. Load the model.\n', ...
@@ -98,15 +99,37 @@ classdef Cnn < handle
                 else % Multi-gpu mode.
                     spmd( numGpus ),
                         net = vl_simplenn_move( net, 'cpu' );
-                    end; net = net{ 1 };
+                    end;
+                    net = net{ 1 };
                 end;
                 % Copy layers.
                 this.layers = net.layers;
                 % Update statistics.
                 batchSize = this.srcInOut.getBatchSize;
-                numBchTr = this.srcInOut.getNumBatchTr;
-                this.eid2energyTr( end + 1 ) = energyTr / ( batchSize * numBchTr );
-                this.eid2metricTr( end + 1 ) = metricTr / ( batchSize * numBchTr );
+                
+        function numBchTr = getNumBatchTr( this )
+            numBchTr = this.numBchTr;
+        end
+        function numBchVal = getNumBatchVal( this )
+            numBchVal = this.numBchVal;
+        end
+                
+                
+                
+                if evaluateMode, sets = {'val'} ; else sets = {'train', 'val'} ; end
+                for f = sets
+                    f = char(f) ;
+                    n = numel(eval(f)) ;
+                    info.(f).speed(epoch) = n / stats.(f)(1) ;
+                    info.(f).objective(epoch) = stats.(f)(2) / n ;
+                    info.(f).error(:,epoch) = stats.(f)(3:end) / n ;
+                end
+                
+                
+                
+                
+                
+                
                 % Save.
                 fprintf( '%s: Save net at epch %d.\n', ...
                     upper( mfilename ), epch );
@@ -238,17 +261,17 @@ classdef Cnn < handle
             metric = 0;
             one = single( 1 );
             % Reset momentum if the learning rate is changed.
-            if learnRate ~= prevLearnRate,
+            if learnRate ~= prevLearnRate
                 fprintf('%s: Change learning rate to %f. Reset momentum.\n', ...
                     upper( mfilename ), learnRate );
-                for l = 1 : numel( net.layers ),
-                    if ~isfield( net.layers{ l }, 'weights' ), continue; end;
+                for l = 1 : numel( net.layers )
+                    if ~isfield( net.layers{ l }, 'weights' ), continue; end
                     net.layers{ l }.filtersMomentum = ...
                         0 * net.layers{ l }.filtersMomentum;
                     net.layers{ l }.biasesMomentum = ...
                         0 * net.layers{ l }.biasesMomentum;
-                end;
-            end;
+                end
+            end
             % For each batch,
             res = [  ]; mmap = [  ];
             for b = 1 : numBchTr; btime = tic;
@@ -293,8 +316,19 @@ classdef Cnn < handle
                 fprintf( '%s: ', upper( mfilename ) );
                 fprintf( 'Epch %d/%d, Bch %d/%d, %dims/s.\n', ...
                     epch, numEpch, b, batchSize, round( batchSize / btime ) );
-            end; % Go to next training batch.
+            end % Go to next training batch.
             % Update the energy and task-specific evaluation metric.
+        end
+        function setGpus( this )
+            numGpus = numel( this.gpus );
+            if numGpus > 1,
+                if isempty( gcp( 'nocreate' ) ),
+                    parpool( 'local', numGpus );
+                    spmd, gpuDevice( this.gpus( labindex ) ), end;
+                end;
+            elseif numGpus == 1,
+                gpuDevice( this.gpus );
+            end;
         end
         function layer = initLayer( this, config )
             switch config.type
@@ -488,7 +522,7 @@ classdef Cnn < handle
             lyids = this.getVisFiltLyers( this.layers );
             for lyid = lyids
                 filters = gather...
-                    ( this.layers{ lyid }.weights{ 1 } );
+                    ( this.layers{ lyid }.filters );
                 im = this.drawFilters( filters );
                 im = imresize( im, 4, 'nearest' );
                 fpath = this.getFiltImPath( lyid, epch );
@@ -503,7 +537,7 @@ classdef Cnn < handle
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getImStatsDir( this )
-            dir = this.srcInOut.srcDb.dstDir;
+            dir = this.srcInOut.srcDb.dir;
         end
         function dir = makeImStatsDir( this )
             dir = this.getImStatsDir;
@@ -516,19 +550,6 @@ classdef Cnn < handle
         end
     end
     methods( Static )
-        function setGpus( gpus )
-            numGpus = numel( gpus );
-            if numGpus > 1,
-                if isempty( gcp( 'nocreate' ) ),
-                    parpool( 'local', numGpus );
-                    spmd, gpuDevice( gpus( labindex ) ), end;
-                end;
-            elseif numGpus == 1,
-                gpuDevice( gpus );
-            end;
-            fname = fullfile( tempdir, 'matconvnet.bin' );
-            if exist( fname, 'file' ), delete( fname ); end;
-        end
         function net = fetchNetOnGpu( net, gpus )
             numGpus = numel( gpus );
             if numGpus == 1,
@@ -586,14 +607,17 @@ classdef Cnn < handle
         function lyids = ...
                 getVisFiltLyers( layers )
             lyids = [  ];
-            for l = 1 : numel( layers ),
-                if ~isfield( layers{ l }, 'weights' ), continue; end;
+            for l = 1 : numel( layers )
+                ly = layers{ l };
+                if ~strcmp( ly.type, 'conv' ),
+                    continue;
+                end;
                 [ ~, ~, nch, ~ ] = size...
-                    ( gather( layers{ l }.weights{ 1 } ) );
+                    ( gather( ly.filters ) );
                 if nch == 1 || nch == 3,
                     lyids( end + 1 ) = l;
                 end;
-            end;
+            end
         end
         function im = drawFilters( filters )
             [ fr, fc, fch, fn ] = size( filters );
@@ -624,7 +648,7 @@ classdef Cnn < handle
                 end;
             end;
             format( end + 1, 1 : 3 ) = { 'double', [ 3, 1 ], 'errors' };
-            if ~exist( fname, 'file' ) && ( labindex == 1 ),
+            if ~exist( fname ) && ( labindex == 1 ),
                 f = fopen( fname, 'wb' );
                 for g = 1 : numGpus,
                     for i = 1 : size( format, 1 ),

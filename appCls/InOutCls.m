@@ -1,120 +1,86 @@
 % IN:  DB.
 % OUT: Images-GT paies per epoch.
 % Task-specific implementation required.
-classdef InOutDetSingleCls < handle
+classdef InOutCls < handle
     properties
+        % General properties.
         srcDb;                  % A general db.
         tsDb;                   % A task specific db to be made. If it is unnecessary, just fetch srcDb.
         numBchTr;               % Number of training batches in an epoch.
         numBchVal;              % Number of validation batches in an epoch.
         poolTr;                 % Training sample pool, where all samples are used up in an epoch.
         poolVal;                % Validation sample pool, where all samples are used up in an epoch.
-        poolRemainTr;           % Remaining training sample pool. It is initilized for each epoch of net training.
-        poolRemainVal;          % Remaining validation sample pool. It is initilized for each epoch of net training.
-        did2dvecTl;             % Quantized directional vectors for top-left.
-        did2dvecBr;             % Quantized directional vectors for bottom-right.
-        signStop;               % Class id of stop prediction.
-        signNoObj;              % Class id of absence prediction.
+        poolRemainTr;           % Remaining training sample pool. It is initilized for each epoch of CNN training.
+        poolRemainVal;          % Remaining validation sample pool. It is initilized for each epoch of CNN training.
         tsMetricName;           % Name of task specific evaluation metric;
-        settingTsDb;            % Setting for the task specific db.
-        settingTsNet;           % Setting for the task specific net.
         settingGeneral;         % Setting for image processing.
+        settingTsDb;            % Setting for the task specific db.
+        settingTsAug;           % Setting for the task specific augmentation.
+        % Task-specific properties.
     end
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Public interface. Net will be trained with the following functions only. %
+    % Public interface. Cnn will be trained with the following functions only. %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods( Access = public )
-        function this = InOutDetSingleCls( srcDb, settingTsDb, settingTsNet, settingGeneral )
+        function this = InOutCls( srcDb, settingGeneral, settingTsDb, settingTsAug )
             this.srcDb = srcDb;
             this.tsMetricName = 'Top-1 err';
-            % Task specific) Default parameters for task specific db.
-            this.settingTsDb.selectClassName                    = 'person';
-            this.settingTsDb.stride                             = 32;
-            this.settingTsDb.dstSide                            = 227;
-            this.settingTsDb.numScale                           = 8;
-            this.settingTsDb.scaleStep                          = 2;
-            this.settingTsDb.startHorzScale                     = 1.5;
-            this.settingTsDb.horzScaleStep                      = 0.5;
-            this.settingTsDb.endHorzScale                       = 4;
-            this.settingTsDb.startVertScale                     = 1.5;
-            this.settingTsDb.vertScaleStep                      = 0.5;
-            this.settingTsDb.endVertScale                       = 2;
-            this.settingTsDb.insectOverFgdObj                   = 0.5;
-            this.settingTsDb.insectOverFgdObjForMajority        = 0.1;
-            this.settingTsDb.fgdObjMajority                     = 3;
-            this.settingTsDb.insectOverBgdObj                   = 0.2;
-            this.settingTsDb.insectOverBgdRegn                  = 0.5;
-            this.settingTsDb.insectOverBgdRegnForReject         = 0.9;
-            this.settingTsDb.numDirection                       = 3;
-            this.settingTsDb.numMaxBgdRegnPerScale              = 100;
-            this.settingTsDb.stopSignError                      = 5;
-            this.settingTsDb.minObjScale                        = 1 / sqrt( 2 );
-            this.settingTsDb.numErode                           = 5;
-            % Task specific) Default parameters for task specific net.
-            global path;
-            this.settingTsNet.pretrainedNetName                 = path.net.vgg_m.name;
-            this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
-            this.settingTsNet.outFilterDepth                    = 2048; % Strange..
             % General) Default parameters to provide batches.
-            this.settingGeneral.dstSide                         = 227;
-            this.settingGeneral.dstCh                           = 3;
-            this.settingGeneral.batchSize                       = 256;
+            this.settingGeneral.dstImSide               = 227;
+            this.settingGeneral.numImChannel            = 3;
+            this.settingGeneral.batchSize               = 256;
+            this.settingGeneral.normalizeByAverageImage = true;
+            % Task specific) Default parameters for task specific db.
+            % Task specific) Default parameters for task specific augmentation.
+            this.settingTsAug.interpolationMethod       = 'bicubic';
+            this.settingTsAug.srcImSide                 = 256; % Set it to dstImSide for no crop-augmentation.
+            this.settingTsAug.rotation                  = 0;
+            this.settingTsAug.keepAspectRate            = true;
             % Apply user setting.
-            this.settingTsDb = setChanges...
-                ( this.settingTsDb, settingTsDb, upper( mfilename ) );
-            this.settingTsNet = setChanges...
-                ( this.settingTsNet, settingTsNet, upper( mfilename ) );
             this.settingGeneral = setChanges...
                 ( this.settingGeneral, settingGeneral, upper( mfilename ) );
+            this.settingTsDb = setChanges...
+                ( this.settingTsDb, settingTsDb, upper( mfilename ) );
+            this.settingTsAug = setChanges...
+                ( this.settingTsAug, settingTsAug, upper( mfilename ) );
         end
         % Prepare for all data to be used.
         function init( this )
-            % Task specific) Define derections.
-            numDirection = this.settingTsDb.numDirection;
-            angstep = ( pi / 2 ) / ( numDirection - 1 );
-            did2angTl = ( 0 : angstep : ( pi / 2 ) )';
-            did2angBr = ( pi : angstep : ( pi * 3 / 2 ) )';
-            this.did2dvecTl = vertcat...
-                ( cos( did2angTl' ), sin( did2angTl' ) );
-            this.did2dvecBr = vertcat...
-                ( cos( did2angBr' ), sin( did2angBr' ) );
-            this.signStop = size( this.did2dvecTl, 2 ) + 1;
-            this.signNoObj = this.signStop + 1;
-            % General) Reform the general source db format to a task-specific format.
-            this.makeTsDb;
-            % General) Make training pool to be consumed in an epoch.
+            % Set Params.
             batchSize = this.settingGeneral.batchSize;
+            % Reform the general source db format to a task-specific format.
+            this.makeTsDb;
+            % Make training pool to be consumed in an epoch.
             [   this.poolTr.sid2iid, ...
                 this.poolTr.sid2regn, ...
-                this.poolTr.sid2dp ] = this.getRegnSeqInEpch( 1 );
+                this.poolTr.sid2cid ] = this.getRegnSeqInEpch( 1 );
             this.numBchTr = numel( this.poolTr.sid2iid ) / batchSize;
-            % General) Make validation pool to be consumed in an epoch.
+            % Make validation pool to be consumed in an epoch.
             [   this.poolVal.sid2iid, ...
                 this.poolVal.sid2regn, ...
-                this.poolVal.sid2dp ] = this.getRegnSeqInEpch( 2 );
+                this.poolVal.sid2cid ] = this.getRegnSeqInEpch( 2 );
             this.numBchVal = numel( this.poolVal.sid2iid ) / batchSize;
         end
-        % Majorly used in net. Provide a tr/val batch of I/O pairs.
+        % Majorly used in CNN. Provide a tr/val batch of I/O pairs.
         function [ ims, gts ] = provdBchTr( this )
             batchSize = this.settingGeneral.batchSize;
             if isempty( this.poolTr.sid2iid )
                 % Make training pool to be consumed in an epoch.
                 [   this.poolTr.sid2iid, ...
                     this.poolTr.sid2regn, ...
-                    this.poolTr.sid2dp ] = this.getRegnSeqInEpch( 1 );
+                    this.poolTr.sid2cid ] = this.getRegnSeqInEpch( 1 );
                 this.numBchTr = numel( this.poolTr.sid2iid ) / batchSize;
             end
-            batchSmpl = ( labindex : numlabs : batchSize )';
-            fprintf( '%d %d %d ... %d / %d\n', batchSmpl( 1 ), batchSmpl( 2 ), batchSmpl( 3 ), batchSmpl( end ), numel( this.poolTr.sid2iid ) );
+            batchSmpl = ( 1 : batchSize )';
             sid2iid = this.poolTr.sid2iid( batchSmpl );
             sid2regn = this.poolTr.sid2regn( :, batchSmpl );
-            sid2dp = this.poolTr.sid2dp( :, batchSmpl );
-            this.poolTr.sid2iid( 1 : batchSize ) = [  ];
-            this.poolTr.sid2regn( :, 1 : batchSize ) = [  ];
-            this.poolTr.sid2dp( :, 1 : batchSize ) = [  ];
+            sid2cid = this.poolTr.sid2cid( :, batchSmpl );
+            this.poolTr.sid2iid( batchSmpl ) = [  ];
+            this.poolTr.sid2regn( :, batchSmpl ) = [  ];
+            this.poolTr.sid2cid( :, batchSmpl ) = [  ];
             iid2impath = this.tsDb.tr.iid2impath;
             [ ims, gts ] = this.makeImGtPairs...
-                ( iid2impath, sid2iid, sid2regn, sid2dp );
+                ( iid2impath, sid2iid, sid2regn, sid2cid );
         end
         function [ ims, gts ] = provdBchVal( this )
             batchSize = this.settingGeneral.batchSize;
@@ -122,88 +88,19 @@ classdef InOutDetSingleCls < handle
                 % Make validation pool to be consumed in an epoch.
                 [   this.poolVal.sid2iid, ...
                     this.poolVal.sid2regn, ...
-                    this.poolVal.sid2dp ] = this.getRegnSeqInEpch( 2 );
+                    this.poolVal.sid2cid ] = this.getRegnSeqInEpch( 2 );
                 this.numBchVal = numel( this.poolVal.sid2iid ) / batchSize;
             end
-            batchSmpl = ( labindex : numlabs : batchSize )';
+            batchSmpl = ( 1 : batchSize )';
             sid2iid = this.poolVal.sid2iid( batchSmpl );
             sid2regn = this.poolVal.sid2regn( :, batchSmpl );
-            sid2dp = this.poolVal.sid2dp( :, batchSmpl );
-            this.poolVal.sid2iid( 1 : batchSize ) = [  ];
-            this.poolVal.sid2regn( :, 1 : batchSize ) = [  ];
-            this.poolVal.sid2dp( :, 1 : batchSize ) = [  ];
+            sid2cid = this.poolVal.sid2cid( :, batchSmpl );
+            this.poolVal.sid2iid( batchSmpl ) = [  ];
+            this.poolVal.sid2regn( :, batchSmpl ) = [  ];
+            this.poolVal.sid2cid( :, batchSmpl ) = [  ];
             iid2impath = this.tsDb.val.iid2impath;
             [ ims, gts ] = this.makeImGtPairs...
-                ( iid2impath, sid2iid, sid2regn, sid2dp );
-        end
-        function [ net, netName ] = provdInitNet( this )
-            global path;
-            % Set parameters.
-            suppPtdLyrLearnRate = this.settingTsNet.suppressPretrainedLayerLearnRate;
-            outFilterDepth = this.settingTsNet.outFilterDepth; % Strange..
-            preTrainedFilterLearningRate = 1 * suppPtdLyrLearnRate;
-            preTrainedBiasLearningRate = 2 * suppPtdLyrLearnRate;
-            initFilterLearningRate = 1;
-            initBiasLearningRate = 2;
-            filterWeightDecay = 1;
-            biasWeightDecay = 0;
-            dstSide = this.settingTsDb.dstSide;
-            dstCh = this.settingGeneral.dstCh;
-            numOutDim = ( 3 + 1 + 1 ) * 2;
-            % Load pre-trained net.
-            srcNet = load( path.net.vgg_m.path );
-            % Initilaize mementum and set learning rate.
-            layers = srcNet.layers;
-            for lid = 1 : numel( layers )
-                if isfield( layers{ lid }, 'weights' ),
-                    % Initialize momentum.
-                    layers{ lid }.momentum{ 1 } = ...
-                        zeros( size( layers{ lid }.weights{ 1 } ), 'single' );
-                    layers{ lid }.momentum{ 2 } = ...
-                        zeros( size( layers{ lid }.weights{ 2 } ), 'single' );
-                    % Set learning rate in the order of [ filter, bias ].
-                    layers{ lid }.learningRate = ...
-                        [ preTrainedFilterLearningRate, preTrainedBiasLearningRate ];
-                    layers{ lid }.weightDecay = [ filterWeightDecay, biasWeightDecay ];
-                end;
-            end
-            % Initialize the directional layer.
-            layers{ end - 1 } = struct(...
-                'type', 'conv', ...
-                'name', 'directional-fc', ...
-                'weights', { { 0.01 * randn( 1, 1, outFilterDepth, numOutDim, 'single' ), zeros( 1, numOutDim, 'single' ) } }, ...
-                'stride', 1, ...
-                'pad', 0, ...
-                'learningRate', [ initFilterLearningRate, initBiasLearningRate ], ...
-                'weightDecay', [ filterWeightDecay, biasWeightDecay ] );
-            layers{ end - 1 }.momentum{ 1 } = ...
-                zeros( size( layers{ end - 1 }.weights{ 1 } ), 'single' );
-            layers{ end - 1 }.momentum{ 2 } = ...
-                zeros( size( layers{ end - 1 }.weights{ 2 } ), 'single' );
-            % Initialize the loss layer.
-            layers{ end }.type = 'custom';
-            layers{ end }.backward = @InOutDetSingleCls.backward;
-            layers{ end }.forward = @InOutDetSingleCls.forward;
-            % Form the net in VGG style.
-            net.layers = layers;
-            net.normalization.averageImage = [  ];
-            net.normalization.keepAspect = false;
-            net.normalization.border = [ 0, 0 ];
-            net.normalization.imageSize = [ dstSide, dstSide, dstCh ];
-            net.normalization.interpolation = 'bicubic';
-            net.classes.name = cell( 1, numOutDim );
-            net.classes.name{ 1 }   = 'TL: bottom';
-            net.classes.name{ 2 }   = 'TL: bottom-right';
-            net.classes.name{ 3 }   = 'TL: right';
-            net.classes.name{ 4 }   = 'TL: stop';
-            net.classes.name{ 5 }   = 'TL: no object';
-            net.classes.name{ 6 }   = 'BR: up';
-            net.classes.name{ 7 }   = 'BR: up-left';
-            net.classes.name{ 8 }   = 'BR: left';
-            net.classes.name{ 9 }   = 'BR: stop';
-            net.classes.name{ 10 }  = 'BR: no object';
-            net.classes.description = net.classes.name;
-            netName = this.getTsNetName;
+                ( iid2impath, sid2iid, sid2regn, sid2cid );
         end
         % Functions to provide information.
         function batchSize = getBatchSize( this )
@@ -216,9 +113,9 @@ classdef InOutDetSingleCls < handle
             numBchVal = this.numBchVal;
         end
         function imsize = getImSize( this )
-            dstSide = this.settingGeneral.dstSide;
+            dstImSide = this.settingGeneral.dstImSide;
             dstCh = this.settingGeneral.dstCh;
-            imsize = [ dstSide; dstSide; dstCh; ];
+            imsize = [ dstImSide; dstImSide; dstCh; ];
         end
         function tsMetricName = getTsMetricName( this )
             tsMetricName = this.tsMetricName;
@@ -232,22 +129,23 @@ classdef InOutDetSingleCls < handle
             if name( end ) == '_', name( end ) = ''; end;
         end
     end
+    
     %%%%%%%%%%%%%%%%%%%%%%
     % Private interface. %
     %%%%%%%%%%%%%%%%%%%%%%
     methods( Access = private )
         function [ ims, gts ] = makeImGtPairs...
-                ( this, iid2impath, sid2iid, sid2regn, sid2dp )
+                ( this, iid2impath, sid2iid, sid2regn, sid2cid )
             % Set Params.
-            dstSide = this.settingGeneral.dstSide;
+            dstImSide = this.settingGeneral.dstImSide;
             dstCh = this.settingGeneral.dstCh;
             % Read images.
             [ idx2iid, ~, sid2idx ] = unique( sid2iid );
             idx2impath = iid2impath( idx2iid );
-            idx2im = vl_imreadjpeg( idx2impath, 'numThreads', 12 );
+            idx2im = vl_imreadjpeg( idx2impath, 'numThreads', 8 );
             % Do the job.
             numSmpl = numel( sid2iid );
-            sid2im = zeros( dstSide, dstSide, dstCh, numSmpl, 'single' );
+            sid2im = gpuArray( zeros( dstImSide, dstImSide, dstCh, numSmpl, 'single' ) );
             for sid = 1 : numSmpl;
                 % Prepare data.
                 wind = sid2regn( :, sid );
@@ -256,154 +154,74 @@ classdef InOutDetSingleCls < handle
                 if dstCh == 1 && size( im, 3 ) == 3, im = mean( im, 3 ); end;
                 if dstCh == 3 && size( im, 3 ) == 1, im = cat( 3, im, im, im ); end;
                 if sid2regn( 5, sid ) == 2, im = fliplr( im ); end;
-                sid2im( :, :, :, sid ) = imresize...
-                    ( im, [ dstSide, dstSide ], 'bicubic' );
-                % sid2im( :, :, :, sid ) = myimresize( gpuArray( im ), dstSide );
+                sid2im( :, :, :, sid ) = myimresize( gpuArray( im ), dstImSide );
+                % sid2im( :, :, :, sid ) = imresize...
+                %     ( im, [ dstImSide, dstImSide ], interpolationMethod );
             end
             ims = sid2im;
-            % Merge ground-truths into a same shape of net output.
-            gts = reshape( sid2dp, [ 1, 1, size( sid2dp, 1 ), size( sid2dp, 2 ) ] );
+            % Merge ground-truths into a same shape of cnn output.
+            gts = reshape( sid2cid, [ 1, 1, size( sid2cid, 1 ), size( sid2cid, 2 ) ] );
         end
-        function [ sid2iid, sid2regn, sid2dp ] = ...
+        function [ sid2iid, sid2regn, sid2cid ] = ...
                 getRegnSeqInEpch( this, setid )
-            if setid == 1, db = this.tsDb.tr; else db = this.tsDb.val; end;
-            batchSize = this.settingGeneral.batchSize;
+            dstImSide = this.settingGeneral.dstImSide;
+            srcImSide = this.settingTsAug.srcImSide;
+            rotation = this.settingTsAug.rotation;
+            keepAspectRate = this.settingTsAug.keepAspectRate;
+            sid2iid = find( this.srcDb.iid2setid == setid );
+            sid2size = this.srcDb.iid2size( :, sid2iid );
+            
             rng( 'shuffle' );
-            % 1/4: Square regions of fore-ground object.
-            oid2iid = db.fgdObj.oid2iid;
-            oid2dpid2regns = db.fgdObj.oid2dpid2regnsSqr;
-            dpid2dids = db.dpid2dids;
-            [   fgdObjSqr.sid2iid, ...
-                fgdObjSqr.sid2regn, ...
-                fgdObjSqr.sid2dp ] = ...
-                InOutDetSingleCls.makeFgdObjRegnSequence...
-                ( oid2iid, oid2dpid2regns, dpid2dids );
-            % 1/4: Non-square regions of fore-ground object.
-            oid2dpid2regns = db.fgdObj.oid2dpid2regnsNsqr;
-            [   fgdObjNsqr.sid2iid, ...
-                fgdObjNsqr.sid2regn, ...
-                fgdObjNsqr.sid2dp ] = ...
-                InOutDetSingleCls.makeFgdObjRegnSequence...
-                ( oid2iid, oid2dpid2regns, dpid2dids );
-            numFgdSmpl = numel( fgdObjSqr.sid2iid ) + ...
-                numel( fgdObjNsqr.sid2iid );
-            % 1/8: Square regions of back-ground object.
-            oid2iid = db.bgdObj.oid2iid;
-            oid2regns = db.bgdObj.oid2regnsSqr;
-            [   bgdObjSqr.sid2iid, ...
-                bgdObjSqr.sid2regn ] = ...
-                InOutDetSingleCls.makeBgdObjRegnSequence...
-                ( oid2iid, oid2regns, round( numFgdSmpl / 4 ) );
-            bgdObjSqr.sid2dp = this.signNoObj * ...
-                ones( 2, numel( bgdObjSqr.sid2iid ), 'single' );
-            % 1/8: Non-square regions of back-ground object.
-            oid2regns = db.bgdObj.oid2regnsNsqr;
-            [   bgdObjNsqr.sid2iid, ...
-                bgdObjNsqr.sid2regn ] = ...
-                InOutDetSingleCls.makeBgdObjRegnSequence...
-                ( oid2iid, oid2regns, round( numFgdSmpl / 4 ) );
-            bgdObjNsqr.sid2dp = this.signNoObj * ...
-                ones( 2, numel( bgdObjNsqr.sid2iid ), 'single' );
-            numBgdObjSmpl = numel( bgdObjSqr.sid2iid ) + ...
-                numel( bgdObjNsqr.sid2iid );
-            % 1/8: Square regions of Back-grounds.
-            iid2sid2regns = db.bgd.iid2sid2regnsSqr;
-            [   bgdSqr.sid2iid, ...
-                bgdSqr.sid2regn ] = ...
-                InOutDetSingleCls.makeBgdRegnSequence...
-                ( iid2sid2regns, round( ( numFgdSmpl - numBgdObjSmpl ) / 2 ) );
-            bgdSqr.sid2dp = this.signNoObj * ...
-                ones( 2, numel( bgdSqr.sid2iid ), 'single' );
-            % 1/8: Non-square regions of Back-grounds.
-            iid2sid2regns = db.bgd.iid2sid2regnsNsqr;
-            [   bgdNsqr.sid2iid, ...
-                bgdNsqr.sid2regn ] = ...
-                InOutDetSingleCls.makeBgdRegnSequence...
-                ( iid2sid2regns, round( ( numFgdSmpl - numBgdObjSmpl ) / 2 ) );
-            bgdNsqr.sid2dp = this.signNoObj * ...
-                ones( 2, numel( bgdNsqr.sid2iid ), 'single' );
-            % Concatenation.
-            sid2iid = cat( 1, ...
-                fgdObjSqr.sid2iid, ...
-                fgdObjNsqr.sid2iid, ...
-                bgdObjSqr.sid2iid, ...
-                bgdObjNsqr.sid2iid, ...
-                bgdSqr.sid2iid, ...
-                bgdNsqr.sid2iid );
-            sid2regn = cat( 2, ...
-                fgdObjSqr.sid2regn, ...
-                fgdObjNsqr.sid2regn, ...
-                bgdObjSqr.sid2regn, ...
-                bgdObjNsqr.sid2regn, ...
-                bgdSqr.sid2regn, ...
-                bgdNsqr.sid2regn );
-            sid2dp = cat( 2, ...
-                fgdObjSqr.sid2dp, ...
-                fgdObjNsqr.sid2dp, ...
-                bgdObjSqr.sid2dp, ...
-                bgdObjNsqr.sid2dp, ...
-                bgdSqr.sid2dp, ...
-                bgdNsqr.sid2dp );
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             % Supply more samples for suitable number of batchs.
             numSmpl = numel( sid2iid );
             numSupp = batchSize * ceil( numSmpl / batchSize ) - numSmpl;
             suppSids = randsample( numSmpl, numSupp );
             sid2iid = cat( 1, sid2iid, sid2iid( suppSids ) );
             sid2regn = cat( 2, sid2regn, sid2regn( :, suppSids ) );
-            sid2dp = cat( 2, sid2dp, sid2dp( :, suppSids ) );
+            sid2cid = cat( 2, sid2cid, sid2cid( :, suppSids ) );
             % Shupple.
             numSmpl = numel( sid2iid );
             perm = randperm( numSmpl );
             sid2iid = sid2iid( perm );
             sid2regn = sid2regn( :, perm );
-            sid2dp = sid2dp( :, perm );
+            sid2cid = sid2cid( :, perm );
         end
         function makeTsDb( this )
-            fpath = this.getTsDbPath;
-            try
-                fprintf( '%s: Try to load ts db.\n', ...
-                    upper( mfilename ) );
-                data = load( fpath );
-                db = data.db;
-                fprintf( '%s: Ts db loaded.\n', ...
-                    upper( mfilename ) );
-            catch
-                fprintf( '%s: Gen ts db.\n', ...
-                    upper( mfilename ) );
-                % Set parameters.
-                db.tr = makeSubTsDb( this, 1 );
-                db.val = makeSubTsDb( this, 2 );
-                fprintf( '%s: Save sub-db.\n', ...
-                    upper( mfilename ) );
-                this.makeTsDbDir;
-                save( fpath, 'db' );
-                fprintf( '%s: Done.\n', ...
-                    upper( mfilename ) );
-            end
-            this.tsDb = db;
+            this.tsDb = this.srcDb;
         end
         function subDb = makeSubTsDb( this, setid )
-            targetClsName = this.settingTsDb.selectClassName;
-            stride = this.settingTsDb.stride;
-            dstSide = this.settingTsDb.dstSide;
-            numScale = this.settingTsDb.numScale;
-            scaleStep = this.settingTsDb.scaleStep;
-            startHorzScale = this.settingTsDb.startHorzScale;
-            horzScaleStep = this.settingTsDb.horzScaleStep;
-            endHorzScale = this.settingTsDb.endHorzScale;
-            startVertScale = this.settingTsDb.startVertScale;
-            vertScaleStep = this.settingTsDb.vertScaleStep;
-            endVertScale = this.settingTsDb.endVertScale;
-            insectOverFgdObj = this.settingTsDb.insectOverFgdObj;
-            insectOverFgdObjForMajority = this.settingTsDb.insectOverFgdObjForMajority;
-            fgdObjMajority = this.settingTsDb.fgdObjMajority;
-            insectOverBgdObj = this.settingTsDb.insectOverBgdObj;
-            insectOverBgdRegn = this.settingTsDb.insectOverBgdRegn;
-            insectOverBgdRegnForReject = this.settingTsDb.insectOverBgdRegnForReject;
-            numMaxBgdRegnPerScale = this.settingTsDb.numMaxBgdRegnPerScale;
-            stopSignError = this.settingTsDb.stopSignError;
-            minObjScale = this.settingTsDb.minObjScale;
-            numErode = this.settingTsDb.numErode;
+            targetClsName = this.settingTsAug.selectClassName;
+            stride = this.settingTsAug.stride;
+            dstImSide = this.settingTsAug.dstImSide;
+            numScale = this.settingTsAug.numScale;
+            scaleStep = this.settingTsAug.scaleStep;
+            startHorzScale = this.settingTsAug.startHorzScale;
+            horzScaleStep = this.settingTsAug.horzScaleStep;
+            endHorzScale = this.settingTsAug.endHorzScale;
+            startVertScale = this.settingTsAug.startVertScale;
+            vertScaleStep = this.settingTsAug.vertScaleStep;
+            endVertScale = this.settingTsAug.endVertScale;
+            insectOverFgdObj = this.settingTsAug.insectOverFgdObj;
+            insectOverFgdObjForMajority = this.settingTsAug.insectOverFgdObjForMajority;
+            fgdObjMajority = this.settingTsAug.fgdObjMajority;
+            insectOverBgdObj = this.settingTsAug.insectOverBgdObj;
+            insectOverBgdRegn = this.settingTsAug.insectOverBgdRegn;
+            insectOverBgdRegnForReject = this.settingTsAug.insectOverBgdRegnForReject;
+            numMaxBgdRegnPerScale = this.settingTsAug.numMaxBgdRegnPerScale;
+            stopSignError = this.settingTsAug.stopSignError;
+            minObjScale = this.settingTsAug.minObjScale;
+            numErode = this.settingTsAug.numErode;
             % Do the job.
             targetClsId = cellfun( @( cname )strcmp( cname, targetClsName ), this.srcDb.cid2name );
             targetClsId = find( targetClsId );
@@ -438,7 +256,7 @@ classdef InOutDetSingleCls < handle
                     oidx2fgdObj, ...
                     imSize, ...
                     stride, ...
-                    dstSide, ...
+                    dstImSide, ...
                     numScale, ...
                     scaleStep, ...
                     startHorzScale, ...
@@ -473,7 +291,7 @@ classdef InOutDetSingleCls < handle
                 rid2fgdObjTlbr( 4, rid2outOfBndBrc ) = rid2tlbrFgdObj( 4, rid2outOfBndBrc );
                 rid2fgdObjTlbr( 1 : 2, : ) = rid2fgdObjTlbr( 1 : 2, : ) - rid2tlbrFgdObj( 1 : 2, : ) + 1;
                 rid2fgdObjTlbr( 3 : 4, : ) = rid2fgdObjTlbr( 3 : 4, : ) - rid2tlbrFgdObj( 1 : 2, : ) + 1;
-                slop = bsxfun( @times, [ dstSide; dstSide ] - 1, 1 ./ ( rid2tlbrFgdObj( 3 : 4, : ) - rid2tlbrFgdObj( 1 : 2, : ) ) );
+                slop = bsxfun( @times, [ dstImSide; dstImSide ] - 1, 1 ./ ( rid2tlbrFgdObj( 3 : 4, : ) - rid2tlbrFgdObj( 1 : 2, : ) ) );
                 rid2fgdObjTlbr( [ 1, 3 ], : ) = bsxfun( @times, slop( 1, : ), ( rid2fgdObjTlbr( [ 1, 3 ], : ) - 1 ) ) + 1;
                 rid2fgdObjTlbr( [ 2, 4 ], : ) = bsxfun( @times, slop( 2, : ), ( rid2fgdObjTlbr( [ 2, 4 ], : ) - 1 ) ) + 1;
                 rid2fgdObjTlbr = round( rid2fgdObjTlbr );
@@ -484,7 +302,7 @@ classdef InOutDetSingleCls < handle
                 rid2stopTl = any( isnan( rid2dvecTl ), 1 );
                 [ ~, rid2didTl ] = max( this.did2dvecTl' * rid2dvecTl, [  ], 1 );
                 rid2didTl( rid2stopTl ) = this.signStop;
-                rid2dvecBr = bsxfun( @minus, rid2fgdObjTlbr( 3 : 4, : ), [ dstSide; dstSide; ] );
+                rid2dvecBr = bsxfun( @minus, rid2fgdObjTlbr( 3 : 4, : ), [ dstImSide; dstImSide; ] );
                 rid2dvecNormBr = sqrt( sum( rid2dvecBr .^ 2, 1 ) );
                 rid2dvecNormBr( rid2dvecNormBr < stopSignError ) = 0;
                 rid2dvecBr = bsxfun( @times, rid2dvecBr, 1./ rid2dvecNormBr );
@@ -497,7 +315,7 @@ classdef InOutDetSingleCls < handle
                     rid2dpid( logical( prod( bsxfun( @minus, rid2dids, dpid2dids( :, dpid ) ) == 0, 1 ) ) ) = dpid;
                 end
                 rid2fgdObjTlbrHF = rid2fgdObjTlbr;
-                rid2fgdObjTlbrHF( [ 2; 4; ], : ) = dstSide - rid2fgdObjTlbrHF( [ 4; 2; ], : ) + 1;
+                rid2fgdObjTlbrHF( [ 2; 4; ], : ) = dstImSide - rid2fgdObjTlbrHF( [ 4; 2; ], : ) + 1;
                 rid2dvecTlHF = rid2fgdObjTlbrHF( 1 : 2, : ) - 1;
                 rid2dvecNormTlHF = sqrt( sum( rid2dvecTlHF .^ 2, 1 ) );
                 rid2dvecNormTlHF( rid2dvecNormTlHF < stopSignError ) = 0;
@@ -505,7 +323,7 @@ classdef InOutDetSingleCls < handle
                 rid2stopTlHF = any( isnan( rid2dvecTlHF ), 1 );
                 [ ~, rid2didTlHF ] = max( this.did2dvecTl' * rid2dvecTlHF, [  ], 1 );
                 rid2didTlHF( rid2stopTlHF ) = this.signStop;
-                rid2dvecBrHF = bsxfun( @minus, rid2fgdObjTlbrHF( 3 : 4, : ), [ dstSide; dstSide; ] );
+                rid2dvecBrHF = bsxfun( @minus, rid2fgdObjTlbrHF( 3 : 4, : ), [ dstImSide; dstImSide; ] );
                 rid2dvecNormBrHF = sqrt( sum( rid2dvecBrHF .^ 2, 1 ) );
                 rid2dvecNormBrHF( rid2dvecNormBrHF < stopSignError ) = 0;
                 rid2dvecBrHF = bsxfun( @times, rid2dvecBrHF, 1./ rid2dvecNormBrHF );
@@ -648,7 +466,7 @@ classdef InOutDetSingleCls < handle
         function name = getTsDbName( this )
             name = sprintf( ...
                 'DBTS_%s_OF_%s', ...
-                this.settingTsDb.changes, ...
+                this.settingTsAug.changes, ...
                 this.srcDb.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
@@ -664,24 +482,15 @@ classdef InOutDetSingleCls < handle
             fname = strcat( this.getTsDbName, '.mat' );
             path = fullfile( this.getTsDbDir, fname );
         end
-        % Function for task-specific network identification.
-        function name = getTsNetName( this )
-            name = sprintf( ...
-                'ANET_%s_%s', ...
-                this.settingTsNet.pretrainedNetName, ...
-                this.settingTsNet.changes );
-            name( strfind( name, '__' ) ) = '';
-            if name( end ) == '_', name( end ) = ''; end;
-        end
     end
     methods( Static )
-        function [ sid2iid, sid2regn, sid2dp ] = ...
+        function [ sid2iid, sid2regn, sid2cid ] = ...
                 makeFgdObjRegnSequence( oid2iid, oid2dpid2regns, dpid2dids )
             numObj = numel( oid2iid );
             numDirPair = size( oid2dpid2regns, 2 );
             sid2iid = zeros( numObj * numDirPair, 1, 'single' );
             sid2regn = zeros( 5, numObj * numDirPair, 'single' );
-            sid2dp = zeros( 2, numObj * numDirPair, 'single' );
+            sid2cid = zeros( 2, numObj * numDirPair, 'single' );
             sid = 0;
             for oid = 1 : numObj,
                 iid = oid2iid( oid );
@@ -693,13 +502,13 @@ classdef InOutDetSingleCls < handle
                     sel = ceil( rand * numRegns );
                     sid2iid( sid ) = iid;
                     sid2regn( :, sid ) = regns( :, sel );
-                    sid2dp( :, sid ) = dpid2dids( :, dpid );
+                    sid2cid( :, sid ) = dpid2dids( :, dpid );
                 end;
             end;
             perm = randperm( sid )';
             sid2iid = sid2iid( perm );
             sid2regn = sid2regn( :, perm );
-            sid2dp = sid2dp( :, perm );
+            sid2cid = sid2cid( :, perm );
         end
         function [ sid2iid, sid2regn ] = ...
                 makeBgdObjRegnSequence( oid2iid, oid2regns, numSmpl )
@@ -747,22 +556,22 @@ classdef InOutDetSingleCls < handle
             sid2iid = sid2iid( perm );
             sid2regn = sid2regn( :, perm );
         end
-        % Majorly used in net. Forward function in output layer.
+        % Majorly used in CNN. Forward/backward function in output layer.
         function res2 = forward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
             numOutLyr = size( gt, 3 );
             numDimPerLyr = size( X, 3 ) / numOutLyr;
             y = gpuArray( zeros( numOutLyr, 1, 'single' ) );
-            for lid = 1 : numOutLyr,
-                sidx = ( lid - 1 ) * numDimPerLyr + 1;
-                eidx = lid * numDimPerLyr;
-                y( lid ) = vl_nnsoftmaxloss...
-                    ( X( :, :, sidx : eidx, : ), gt( :, :, lid, : ) );
+            for lyid = 1 : numOutLyr,
+                sidx = ( lyid - 1 ) * numDimPerLyr + 1;
+                eidx = lyid * numDimPerLyr;
+                y( lyid ) = vl_nnsoftmaxloss...
+                    ( X( :, :, sidx : eidx, : ), gt( :, :, lyid, : ) );
             end
             res2.x = mean( y );
         end
-        % Majorly used in net. Backward function in output layer.
+        % Majorly used in CNN. Forward/backward function in output layer.
         function res1 = backward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
@@ -770,16 +579,16 @@ classdef InOutDetSingleCls < handle
             numDimPerLyr = size( X, 3 ) / numOutLyr;
             dzdy = res2.dzdx / numOutLyr;
             Y = gpuArray( zeros( size( X ), 'single' ) );
-            for lid = 1 : numOutLyr,
-                sidx = ( lid - 1 ) * numDimPerLyr + 1;
-                eidx = lid * numDimPerLyr;
+            for lyid = 1 : numOutLyr,
+                sidx = ( lyid - 1 ) * numDimPerLyr + 1;
+                eidx = lyid * numDimPerLyr;
                 Y( :, :, sidx : eidx, : ) = ...
                     vl_nnsoftmaxloss...
-                    ( X( :, :, sidx : eidx, : ), gt( :, :, lid, : ), dzdy );
+                    ( X( :, :, sidx : eidx, : ), gt( :, :, lyid, : ), dzdy );
             end
             res1.dzdx = Y;
         end
-        % Majorly used in net. Update energy and task-specific evaluation metric.
+        % Majorly used in CNN. Update energy and task-specific evaluation metric.
         % For this target application, object detection, 
         % the metric is top-1 accuracy.
         function tsMetric = computeTsMetric( res, gts )
@@ -788,20 +597,90 @@ classdef InOutDetSingleCls < handle
             numOutLyr = size( gts, 3 );
             numDimPerLyr = size( output, 3 ) / numOutLyr;
             err1 = zeros( numOutLyr, 1, 'single' );
-            for lid = 1 : numOutLyr,
-                sidx = ( lid - 1 ) * numDimPerLyr + 1;
-                eidx = lid * numDimPerLyr;
+            for lyid = 1 : numOutLyr,
+                sidx = ( lyid - 1 ) * numDimPerLyr + 1;
+                eidx = lyid * numDimPerLyr;
                 predictions = output( :, :, sidx : eidx, : );
                 [ ~, predictions ] = sort...
                     ( predictions, 3, 'descend' );
                 err1_ = ~bsxfun( @eq, predictions, ...
-                    gts( :, :, lid, : ) );
+                    gts( :, :, lyid, : ) );
                 % Take top predictions.
+                % If top-1, err1_ = err1_( :, :, 1, : );
                 % If top-5, err1_ = err1_( :, :, 1 : 5, : );
                 err1_ = err1_( :, :, 1, : );
-                err1( lid ) = sum( err1_( : ) );
+                err1( lyid ) = sum( err1_( : ) );
             end
             tsMetric = mean( err1 );
+        end
+        function [ layers, cnnName ] = provdInitCnn
+            global path;
+            cnnName = 'PTVGGM';
+            % Load pre-trained CNN.
+            srcCnn = load( path.extnet_vgg_m );
+            layers = srcCnn.layers;
+            for lid = 1 : numel( layers )
+                if ~strcmp( layers{ lid }.type, 'conv' ),
+                    continue;
+                end
+                if ~isfield( layers{ lid }, 'filtersMomentum' )
+                    layers{ lid }.filtersMomentum = ...
+                        zeros( 'like', layers{ lid }.filters );
+                    layers{ lid }.biasesMomentum = ...
+                        zeros( 'like', layers{ lid }.biases );
+                end
+                if ~isfield( layers{ lid }, 'filtersLearningRate' )
+                    layers{ lid }.filtersLearningRate = 1 / 10;     % Caution!
+                    layers{ lid }.biasesLearningRate = 2 / 10;      % Caution!
+                end
+                if ~isfield( layers{ lid }, 'filtersWeightDecay' )
+                    layers{ lid }.filtersWeightDecay = 1;
+                    layers{ lid }.biasesWeightDecay = 0;
+                end
+            end
+            % Re-initialize the last convolutional layer.
+            cfgConv.type = 'conv';
+            cfgConv.filterSize = 1;
+            cfgConv.filterDepth = 2048;
+            cfgConv.numFilter = ( 3 + 1 + 1 ) * 2 * 1; % ( numDirection + stopSignal + noObjectSignal ) * ( TL + BR ) * numObjClass.
+            cfgConv.stride = [ 1, 1 ];
+            cfgConv.pad = [ 0, 0, 0, 0 ];
+            cfgConv.initWScal = 1;
+            cfgConv.initB = 0;
+            cfgConv.filtersLearningRate = 1;    % Caution!
+            cfgConv.biasesLearningRate = 2;     % Caution!
+            cfgConv.filtersWeightDecay = 1;
+            cfgConv.biasesWeightDecay = 0;
+            layerConv.type = cfgConv.type;
+            layerConv.filters = 0.01 / ...
+                cfgConv.initWScal * ...
+                randn( cfgConv.filterSize, ...
+                cfgConv.filterSize, ...
+                cfgConv.filterDepth, ...
+                cfgConv.numFilter, 'single' );
+            layerConv.biases = cfgConv.initB * ...
+                ones( 1, cfgConv.numFilter, 'single' );
+            layerConv.stride = cfgConv.stride;
+            layerConv.pad = cfgConv.pad;
+            layerConv.filtersLearningRate = ...
+                cfgConv.filtersLearningRate;
+            layerConv.biasesLearningRate = ...
+                cfgConv.biasesLearningRate;
+            layerConv.filtersWeightDecay = ...
+                cfgConv.filtersWeightDecay;
+            layerConv.biasesWeightDecay = ...
+                cfgConv.biasesWeightDecay;
+            layerConv.filtersMomentum = ...
+                zeros( 'like', layerConv.filters );
+            layerConv.biasesMomentum = ...
+                zeros( 'like', layerConv.biases );
+            % Re-initialize the last layer.
+            layerCustom.type = 'custom';
+            layerCustom.backward = @InOutCls.backward;
+            layerCustom.forward = @InOutCls.forward;
+            % Replacement.
+            layers{ end - 1 } = layerConv;
+            layers{ end } = layerCustom;
         end
     end
 end
