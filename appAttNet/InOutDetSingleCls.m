@@ -5,6 +5,7 @@ classdef InOutDetSingleCls < handle
     properties
         srcDb;                  % A general db.
         tsDb;                   % A task specific db to be made. If it is unnecessary, just fetch srcDb.
+        rgbMean;                % A task specific RGB mean to normalize images.
         numBchTr;               % Number of training batches in an epoch.
         numBchVal;              % Number of validation batches in an epoch.
         poolTr;                 % Training sample pool, where all samples are used up in an epoch.
@@ -33,15 +34,12 @@ classdef InOutDetSingleCls < handle
             this.settingTsDb.dstSide                            = 227;
             this.settingTsDb.numScale                           = 8;
             this.settingTsDb.scaleStep                          = 2;
-            this.settingTsDb.startHorzScale                     = 1.5;
-            this.settingTsDb.horzScaleStep                      = 0.5;
-            this.settingTsDb.endHorzScale                       = 4;
-            this.settingTsDb.startVertScale                     = 1.5;
-            this.settingTsDb.vertScaleStep                      = 0.5;
-            this.settingTsDb.endVertScale                       = 2;
+            this.settingTsDb.docScaleMag                        = 4;
+            this.settingTsDb.numAspect                          = 16;
+            this.settingTsDb.confidence                         = 0.97;
             this.settingTsDb.insectOverFgdObj                   = 0.5;
             this.settingTsDb.insectOverFgdObjForMajority        = 0.1;
-            this.settingTsDb.fgdObjMajority                     = 3;
+            this.settingTsDb.fgdObjMajority                     = 1.5;
             this.settingTsDb.insectOverBgdObj                   = 0.2;
             this.settingTsDb.insectOverBgdRegn                  = 0.5;
             this.settingTsDb.insectOverBgdRegnForReject         = 0.9;
@@ -52,9 +50,8 @@ classdef InOutDetSingleCls < handle
             this.settingTsDb.numErode                           = 5;
             % Task specific) Default parameters for task specific net.
             global path;
-            this.settingTsNet.pretrainedNetName                 = path.net.vgg_m.name;
+            this.settingTsNet.pretrainedNetName                 = path.net.vgg_m_2048.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
-            this.settingTsNet.outFilterDepth                    = 2048; % Strange..
             % General) Default parameters to provide batches.
             this.settingGeneral.dstSide                         = 227;
             this.settingGeneral.dstCh                           = 3;
@@ -69,6 +66,8 @@ classdef InOutDetSingleCls < handle
         end
         % Prepare for all data to be used.
         function init( this )
+            % Task specific) Compute a rgb mean vector.
+            this.computeRgbMean;
             % Task specific) Define derections.
             numDirection = this.settingTsDb.numDirection;
             angstep = ( pi / 2 ) / ( numDirection - 1 );
@@ -105,7 +104,6 @@ classdef InOutDetSingleCls < handle
                 this.numBchTr = numel( this.poolTr.sid2iid ) / batchSize;
             end
             batchSmpl = ( labindex : numlabs : batchSize )';
-            fprintf( '%d %d %d ... %d / %d\n', batchSmpl( 1 ), batchSmpl( 2 ), batchSmpl( 3 ), batchSmpl( end ), numel( this.poolTr.sid2iid ) );
             sid2iid = this.poolTr.sid2iid( batchSmpl );
             sid2regn = this.poolTr.sid2regn( :, batchSmpl );
             sid2dp = this.poolTr.sid2dp( :, batchSmpl );
@@ -140,7 +138,6 @@ classdef InOutDetSingleCls < handle
             global path;
             % Set parameters.
             suppPtdLyrLearnRate = this.settingTsNet.suppressPretrainedLayerLearnRate;
-            outFilterDepth = this.settingTsNet.outFilterDepth; % Strange..
             preTrainedFilterLearningRate = 1 * suppPtdLyrLearnRate;
             preTrainedBiasLearningRate = 2 * suppPtdLyrLearnRate;
             initFilterLearningRate = 1;
@@ -151,7 +148,7 @@ classdef InOutDetSingleCls < handle
             dstCh = this.settingGeneral.dstCh;
             numOutDim = ( 3 + 1 + 1 ) * 2;
             % Load pre-trained net.
-            srcNet = load( path.net.vgg_m.path );
+            srcNet = load( path.net.vgg_m_2048.path );
             % Initilaize mementum and set learning rate.
             layers = srcNet.layers;
             for lid = 1 : numel( layers )
@@ -171,7 +168,7 @@ classdef InOutDetSingleCls < handle
             layers{ end - 1 } = struct(...
                 'type', 'conv', ...
                 'name', 'directional-fc', ...
-                'weights', { { 0.01 * randn( 1, 1, outFilterDepth, numOutDim, 'single' ), zeros( 1, numOutDim, 'single' ) } }, ...
+                'weights', { { 0.01 * randn( 1, 1, 2048, numOutDim, 'single' ), zeros( 1, numOutDim, 'single' ) } }, ...
                 'stride', 1, ...
                 'pad', 0, ...
                 'learningRate', [ initFilterLearningRate, initBiasLearningRate ], ...
@@ -236,6 +233,44 @@ classdef InOutDetSingleCls < handle
     % Private interface. %
     %%%%%%%%%%%%%%%%%%%%%%
     methods( Access = private )
+        function computeRgbMean( this )
+            fpath = this.getRgbMeanPath;
+            try
+                data = load( fpath );
+                this.rgbMean = data.rgbMean;
+            catch
+                dstCh = this.settingGeneral.dstCh;
+                idx2iid = this.srcDb.getTriids;
+                numIm = numel( idx2iid );
+                batchSize = 256;
+                idx2rgb = zeros( 1, 1, dstCh, numIm, 'single' );
+                cnt = 0;
+                cummt = 0; bcnt = 0;
+                for i = 1 : batchSize : numIm,
+                    bcnt = bcnt + 1;
+                    btime = tic;
+                    biids = idx2iid( i : min( i + batchSize - 1, numIm ) );
+                    bimpaths = this.srcDb.iid2impath( biids );
+                    ims = vl_imreadjpeg( bimpaths, 'numThreads', 12 );
+                    for j = 1 : numel( ims ),
+                        im = ims{ j };
+                        if dstCh == 1 && size( im, 3 ) == 3, im = mean( im, 3 ); end;
+                        if dstCh == 3 && size( im, 3 ) == 1, im = cat( 3, im, im, im ); end;
+                        cnt = cnt + 1;
+                        [ r, c, ~ ] = size( im );
+                        idx2rgb( :, :, :, cnt ) = sum( sum( im, 1 ), 2 ) / ( r * c );
+                    end;
+                    cummt = cummt + toc( btime );
+                    fprintf( '%s: ', upper( mfilename ) );
+                    disploop( numel( 1 : batchSize : numIm ), bcnt, ...
+                        'Compute rgb mean.', cummt );
+                end;
+                rgbMean = mean( idx2rgb, 4 );
+                this.makeRgbMeanDir;
+                save( fpath, 'rgbMean' );
+                this.rgbMean = rgbMean;
+            end;
+        end
         function [ ims, gts ] = makeImGtPairs...
                 ( this, iid2impath, sid2iid, sid2regn, sid2dp )
             % Set Params.
@@ -249,17 +284,15 @@ classdef InOutDetSingleCls < handle
             numSmpl = numel( sid2iid );
             sid2im = zeros( dstSide, dstSide, dstCh, numSmpl, 'single' );
             for sid = 1 : numSmpl;
-                % Prepare data.
                 wind = sid2regn( :, sid );
                 im = idx2im{ sid2idx( sid ) };
-                im = im( wind( 1 ) : wind( 3 ), wind( 2 ) : wind( 4 ), : );
                 if dstCh == 1 && size( im, 3 ) == 3, im = mean( im, 3 ); end;
                 if dstCh == 3 && size( im, 3 ) == 1, im = cat( 3, im, im, im ); end;
+                im = cropAndNormalizeIm( im, size( im ), wind, this.rgbMean );
                 if sid2regn( 5, sid ) == 2, im = fliplr( im ); end;
                 sid2im( :, :, :, sid ) = imresize...
                     ( im, [ dstSide, dstSide ], 'bicubic' );
-                % sid2im( :, :, :, sid ) = myimresize( gpuArray( im ), dstSide );
-            end
+            end;
             ims = sid2im;
             % Merge ground-truths into a same shape of net output.
             gts = reshape( sid2dp, [ 1, 1, size( sid2dp, 1 ), size( sid2dp, 2 ) ] );
@@ -388,12 +421,9 @@ classdef InOutDetSingleCls < handle
             dstSide = this.settingTsDb.dstSide;
             numScale = this.settingTsDb.numScale;
             scaleStep = this.settingTsDb.scaleStep;
-            startHorzScale = this.settingTsDb.startHorzScale;
-            horzScaleStep = this.settingTsDb.horzScaleStep;
-            endHorzScale = this.settingTsDb.endHorzScale;
-            startVertScale = this.settingTsDb.startVertScale;
-            vertScaleStep = this.settingTsDb.vertScaleStep;
-            endVertScale = this.settingTsDb.endVertScale;
+            docScaleMag = this.settingTsDb.docScaleMag;
+            numAspect = this.settingTsDb.numAspect;
+            confidence = this.settingTsDb.confidence;
             insectOverFgdObj = this.settingTsDb.insectOverFgdObj;
             insectOverFgdObjForMajority = this.settingTsDb.insectOverFgdObjForMajority;
             fgdObjMajority = this.settingTsDb.fgdObjMajority;
@@ -407,6 +437,10 @@ classdef InOutDetSingleCls < handle
             % Do the job.
             targetClsId = cellfun( @( cname )strcmp( cname, targetClsName ), this.srcDb.cid2name );
             targetClsId = find( targetClsId );
+            oid2bbox = this.srcDb.oid2bbox( :, this.srcDb.oid2cid == targetClsId );
+            aspects = determineAspectRates( oid2bbox, numAspect - 1, confidence );
+            aspects = unique( cat( 1, 1, aspects ) );
+            scales = scaleStep .^ ( 0 : 0.5 : 0.5 * ( numScale - 1 ) );
             idx2iid = find( this.srcDb.iid2setid == setid );
             numIm = numel( idx2iid );
             [ didsTl, didsBr ] = meshgrid( 1 : this.signStop, 1 : this.signStop );
@@ -425,34 +459,33 @@ classdef InOutDetSingleCls < handle
             for newiid = 1 : numIm;
                 itime = tic;
                 iid = idx2iid( newiid );
+                imSize = this.srcDb.iid2size( :, iid );
                 oidx2oid = find( this.srcDb.oid2iid == iid );
                 oidx2cid = this.srcDb.oid2cid( oidx2oid );
                 oidx2fgdObj = oidx2cid == targetClsId;
                 oidx2bgdObj = ~oidx2fgdObj;
-                oidx2tlbr = this.srcDb.oid2bbox( :, oidx2oid );
-                oidx2tlbr = single( round( oidx2tlbr ) );
-                imSize = this.srcDb.iid2size( :, iid );
+                oidx2tlbr = round( this.srcDb.oid2bbox( :, oidx2oid ) );
+                oidx2tlbr = single( oidx2tlbr );
                 [ rid2tlbrFgdObj, rid2oidxFgdObj, rid2tlbrBgd, rid2oidxBgd ] = ...
                     extTargetObjRegns( ...
                     oidx2tlbr, ...
                     oidx2fgdObj, ...
                     imSize, ...
+                    docScaleMag, ...
                     stride, ...
                     dstSide, ...
-                    numScale, ...
-                    scaleStep, ...
-                    startHorzScale, ...
-                    horzScaleStep, ...
-                    endHorzScale, ...
-                    startVertScale, ...
-                    vertScaleStep, ...
-                    endVertScale, ...
+                    scales, ...
+                    aspects, ...
                     insectOverFgdObj, ...
                     insectOverFgdObjForMajority, ...
                     fgdObjMajority, ...
                     insectOverBgdObj, ...
                     insectOverBgdRegn, ...
                     insectOverBgdRegnForReject );
+                % Classify regions in three ways: 
+                % 1. Fore-ground object regions: rid2tlbrFgdObj
+                % 2. Back-ground object regions: rid2tlbrBgdObj
+                % 3. Back-ground regions: rid2tlbrBgd
                 rid2bgdObj = logical( rid2oidxBgd );
                 rid2oidxBgdObj = rid2oidxBgd( rid2bgdObj );
                 rid2oidxBgdObj = rid2oidxBgdObj( : );
@@ -461,6 +494,12 @@ classdef InOutDetSingleCls < handle
                 rid2tlbrFgdObj = single( round( rid2tlbrFgdObj ) );
                 rid2tlbrBgdObj = single( round( rid2tlbrBgdObj ) );
                 rid2tlbrBgd = single( round( rid2tlbrBgd ) );
+                rid2rectBgd = tlbr2rect( rid2tlbrBgd );
+                rid2areaBgd = prod( rid2rectBgd( 3 : 4, : ), 1 );
+                rid2insctBtwImAndBgd = rectint( tlbr2rect( [ 1; 1; imSize ] )', rid2rectBgd' );
+                rid2insctBtwImAndBgd = rid2insctBtwImAndBgd ./ rid2areaBgd;
+                rid2okBgd = rid2insctBtwImAndBgd > 0.7;
+                rid2tlbrBgd = rid2tlbrBgd( :, rid2okBgd );
                 % Fore-ground objects.
                 rid2fgdObjTlbr = oidx2tlbr( 1 : 4, rid2oidxFgdObj );
                 rid2outOfBndTlr = ( rid2tlbrFgdObj( 1, : ) - rid2fgdObjTlbr( 1, : ) ) > 0;
@@ -473,7 +512,7 @@ classdef InOutDetSingleCls < handle
                 rid2fgdObjTlbr( 4, rid2outOfBndBrc ) = rid2tlbrFgdObj( 4, rid2outOfBndBrc );
                 rid2fgdObjTlbr( 1 : 2, : ) = rid2fgdObjTlbr( 1 : 2, : ) - rid2tlbrFgdObj( 1 : 2, : ) + 1;
                 rid2fgdObjTlbr( 3 : 4, : ) = rid2fgdObjTlbr( 3 : 4, : ) - rid2tlbrFgdObj( 1 : 2, : ) + 1;
-                slop = bsxfun( @times, [ dstSide; dstSide ] - 1, 1 ./ ( rid2tlbrFgdObj( 3 : 4, : ) - rid2tlbrFgdObj( 1 : 2, : ) ) );
+                slop = bsxfun( @times, [ dstSide; dstSide; ] - 1, 1 ./ ( rid2tlbrFgdObj( 3 : 4, : ) - rid2tlbrFgdObj( 1 : 2, : ) ) );
                 rid2fgdObjTlbr( [ 1, 3 ], : ) = bsxfun( @times, slop( 1, : ), ( rid2fgdObjTlbr( [ 1, 3 ], : ) - 1 ) ) + 1;
                 rid2fgdObjTlbr( [ 2, 4 ], : ) = bsxfun( @times, slop( 2, : ), ( rid2fgdObjTlbr( [ 2, 4 ], : ) - 1 ) ) + 1;
                 rid2fgdObjTlbr = round( rid2fgdObjTlbr );
@@ -520,7 +559,6 @@ classdef InOutDetSingleCls < handle
                 fgdObj.oid2iid{ newiid } = newiid * ones( sum( oidx2fgdObj ), 1, 'single' );
                 % Fore-ground objects: square regions.
                 rid2sqrFgdObj = rid2tlbrFgdObj( 6, : ) == 1;
-                rid2sqrFgdObj = rid2sqrFgdObj & ( rid2tlbrFgdObj( 7, : ) == 1 );
                 rid2dpidSqr = [ rid2dpid( rid2sqrFgdObj ), rid2dpidHF( rid2sqrFgdObj ) ];
                 rid2tlbr = rid2tlbrFgdObj( 1 : 4, rid2sqrFgdObj );
                 rid2tlbr = [ [ rid2tlbr; ones( 1, size( rid2tlbr, 2 ) ) ], ...
@@ -588,7 +626,6 @@ classdef InOutDetSingleCls < handle
                 bgdObj.oid2iid{ newiid } = newiid * ones( sum( oidx2bgdObj ), 1, 'single' );
                 % Back-ground objects: square regions.
                 rid2sqrBgdObj = rid2tlbrBgdObj( 6, : ) == 1;
-                rid2sqrBgdObj = rid2sqrBgdObj & ( rid2tlbrBgdObj( 7, : ) == 1 );
                 rid2tlbr = rid2tlbrBgdObj( 1 : 4, rid2sqrBgdObj );
                 rid2oidxBgdObjSqr = rid2oidxBgdObj( rid2sqrBgdObj );
                 bgdObj.oid2regnsSqr{ newiid } = arrayfun( ...
@@ -596,7 +633,6 @@ classdef InOutDetSingleCls < handle
                     find( oidx2bgdObj ), 'UniformOutput', false );
                 % Back-ground objects: non-square regions.
                 rid2nsqrBgdObj = rid2tlbrBgdObj( 6, : ) ~= 1;
-                rid2nsqrBgdObj = rid2nsqrBgdObj | ( rid2tlbrBgdObj( 7, : ) ~= 1 );
                 rid2tlbr = rid2tlbrBgdObj( 1 : 4, rid2nsqrBgdObj );
                 rid2oidxBgdObjNsqr = rid2oidxBgdObj( rid2nsqrBgdObj );
                 bgdObj.oid2regnsNsqr{ newiid } = arrayfun( ...
@@ -604,26 +640,24 @@ classdef InOutDetSingleCls < handle
                     find( oidx2bgdObj ), 'UniformOutput', false );
                 % Back-ground: squre regions.
                 rid2sqrBgd = rid2tlbrBgd( 6, : ) == 1;
-                rid2sqrBgd = rid2sqrBgd & ( rid2tlbrBgd( 7, : ) == 1 );
                 for s = 1 : numScale,
                     ok = rid2sqrBgd & ( rid2tlbrBgd( 5, : ) == s );
                     rids = find( ok );
                     if numel( rids ) > numMaxBgdRegnPerScale,
                         rids = sort( randsample( rids, numMaxBgdRegnPerScale ) );
-                    end
+                    end;
                     bgd.iid2sid2regnsSqr{ newiid, s } = rid2tlbrBgd( 1 : 4, rids );
-                end
+                end;
                 % Back-ground: non-square regions.
                 rid2nsqrBgd = rid2tlbrBgd( 6, : ) ~= 1;
-                rid2nsqrBgd = rid2nsqrBgd | ( rid2tlbrBgd( 7, : ) ~= 1 );
                 for s = 1 : numScale,
                     ok = rid2nsqrBgd & ( rid2tlbrBgd( 5, : ) == s );
                     rids = find( ok );
                     if numel( rids ) > numMaxBgdRegnPerScale,
                         rids = sort( randsample( rids, numMaxBgdRegnPerScale ) );
-                    end
+                    end;
                     bgd.iid2sid2regnsNsqr{ newiid, s } = rid2tlbrBgd( 1 : 4, rids );
-                end
+                end;
                 cummt = cummt + toc( itime );
                 fprintf( '%s: ', upper( mfilename ) );
                 disploop...
@@ -645,6 +679,25 @@ classdef InOutDetSingleCls < handle
             subDb.bgd = bgd;
         end
         % Functions for file IO.
+        function name = getRgbMeanName( this )
+            name = sprintf( ...
+                'RGBM_OF_%s', ...
+                this.srcDb.getName );
+            name( strfind( name, '__' ) ) = '';
+            if name( end ) == '_', name( end ) = ''; end;
+        end
+        function dir = getRgbMeanDir( this )
+            dir = this.srcDb.getDir;
+        end
+        function dir = makeRgbMeanDir( this )
+            dir = this.getRgbMeanDir;
+            if ~exist( dir, 'dir' ), mkdir( dir ); end;
+        end
+        function path = getRgbMeanPath( this )
+            fname = strcat( this.getRgbMeanName, '.mat' );
+            path = fullfile( this.getRgbMeanDir, fname );
+        end
+        
         function name = getTsDbName( this )
             name = sprintf( ...
                 'DBTS_%s_OF_%s', ...

@@ -42,9 +42,10 @@ classdef Net < handle
             this.layers = net.layers;
             this.classes = net.classes;
             this.normalization = net.normalization;
-            if isempty( net.normalization.averageImage ),
+            if isempty( net.normalization.averageImage ) ...
+                    && ~strcmp( this.setting.normalizeImage, 'NONE' ),
                 this.computeImStats;
-            end
+            end;
             this.eid2energyTr = [  ];
             this.eid2metricTr = [  ];
             this.eid2energyVal = [  ];
@@ -256,7 +257,6 @@ classdef Net < handle
             % Set params.
             epch = this.currentEpch + 1;
             numGpus = numel( this.gpus );
-            normalizeImage = this.setting.normalizeImage;
             numEpch = numel( this.setting.learningRate );
             learnRate = this.setting.learningRate( epch );
             weightDecay = this.setting.weightDecay;
@@ -287,7 +287,7 @@ classdef Net < handle
                 % Put data to GPU memory.
                 if numGpus > 0, ims = gpuArray( ims ); gts = gpuArray( gts ); one = gpuArray( one ); end;
                 % Normalize input image.
-                if normalizeImage, ims = this.normalizeIms( ims ); end;
+                ims = this.normalizeIms( ims );
                 % Attatch the GT to network to compute the energy.
                 net.layers{ end }.class = gts;
                 % Do forward/backward.
@@ -329,7 +329,6 @@ classdef Net < handle
             % Set params.
             epch = this.currentEpch + 1;
             numGpus = numel( this.gpus );
-            normalizeImage = this.setting.normalizeImage;
             numEpch = numel( this.setting.learningRate );
             batchSize = this.srcInOut.getBatchSize;
             numBchVal = this.srcInOut.getNumBatchVal;
@@ -343,7 +342,7 @@ classdef Net < handle
                 % Put data to GPU memory.
                 if numGpus > 0, ims = gpuArray( ims ); gts = gpuArray( gts ); end;
                 % Normalize input image.
-                if normalizeImage, ims = this.normalizeIms( ims ); end;
+                ims = this.normalizeIms( ims );
                 % Attatch the GT to network to compute the energy.
                 net.layers{ end }.class = gts;
                 % Do forward/backward.

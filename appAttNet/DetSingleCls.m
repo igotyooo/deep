@@ -2,7 +2,9 @@ classdef DetSingleCls < handle
     properties
         db;
         attNet;
-        avgIm;
+        rgbMean;
+        scales;
+        aspects;
         stride;
         patchSize;
         did2dvecTl;
@@ -31,11 +33,9 @@ classdef DetSingleCls < handle
             this.settingInitDet.numScale            = 6;
             this.settingInitDet.dvecLength          = 30;
             this.settingInitDet.numMaxTest          = 50;
-            this.settingInitDet.docScaleMag         = 4;
-            this.settingInitDet.startHorzScale      = 1;
-            this.settingInitDet.horzScaleStep       = 0.5;
-            this.settingInitDet.endHorzScale        = 2;
-            this.settingInitDet.preBoundInitGuess   = false;
+            this.settingInitDet.patchMargin         = 0.5;
+            this.settingInitDet.numAspect           = 16 / 2;
+            this.settingInitDet.confidence          = 0.97;
             this.settingInitMrg.method              = 'OV'; % 'NMS'
             this.settingInitMrg.overlap             = 0.7;
             this.settingInitMrg.minNumSuppBox       = 1;
@@ -62,14 +62,31 @@ classdef DetSingleCls < handle
                 upper( mfilename ) );
         end
         function init( this, gpus )
-            this.avgIm = this.attNet.normalization.averageImage;
+            % Set RGB mean vector.
+            this.rgbMean = this.attNet.srcInOut.rgbMean;
+            % Determine multiple scales.
+            scaleStep = this.settingInitDet.scaleStep;
+            numScale = this.settingInitDet.numScale;
+            this.scales = scaleStep .^ ( 0 : 0.5 : ( 0.5 * ( numScale - 1 ) ) )';
+            % Determine multiple aspect rates.
+            numAspect = this.settingInitDet.numAspect;
+            confidence = this.settingInitDet.confidence;
+            clsName = this.attNet.srcInOut.settingTsDb.selectClassName;
+            cid = find( cellfun( @( name )strcmp( name, clsName ), this.db.cid2name ) );
+            oid2bbox = this.db.oid2bbox( :, this.db.oid2cid == cid );
+            this.aspects = determineAspectRates( oid2bbox, numAspect - 1, confidence );
+            this.aspects = unique( cat( 1, 1, this.aspects ) );
+            % Set directional unit vectors.
             this.did2dvecTl = this.attNet.srcInOut.did2dvecTl;
             this.did2dvecBr = this.attNet.srcInOut.did2dvecBr;
             this.did2dvecTl  = round( cat( 2, this.did2dvecTl, [ 0; 0; ] ) );
             this.did2dvecBr  = round( cat( 2, this.did2dvecBr, [ 0; 0; ] ) );
+            % Set non-directional class ids.
             this.signStop = this.attNet.srcInOut.signStop;
             this.signNoObj = this.attNet.srcInOut.signNoObj;
+            % Fetch net on GPU.
             this.attNet = Net.fetchNetOnGpu( this.attNet, gpus );
+            % Determine patch size and stride for activation map.
             this.determineInOutRelations( gpus );
         end
         function detDb( this )
@@ -176,7 +193,7 @@ classdef DetSingleCls < handle
         end
         function [ did2redet, did2rescore ] = im2redet( this, im, did2det )
             % Set parameters.
-            docScaleMag = this.settingInitDet.docScaleMag;
+            docScaleMag = 4;
             boxScaleMag = this.settingRefine.boxScaleMag;
             method = this.settingRefine.method;
             overlap = this.settingRefine.overlap;
@@ -190,7 +207,7 @@ classdef DetSingleCls < handle
             center = round( imTargetSize / 2 );
             imTl = center - round( imSize / 2 ) + 1;
             imBr = imTl + imSize - 1;
-            imBgd = imresize( uint8( this.avgIm ), imTargetSize );
+            imBgd = imresize( uint8( this.rgbMean ), imTargetSize );
             imBgd( imTl( 1 ) : imBr( 1 ), imTl( 2 ) : imBr( 2 ), : ) = im;
             imMag = imBgd;
             did2det = bsxfun( @plus, did2det, [ imTl( : ); imTl( : ); ] ) - 1;
@@ -409,22 +426,12 @@ classdef DetSingleCls < handle
             end;
         end
         function [ rid2det, rid2out ] = im2det0( this, im )
-            % Augment document size.
-            docScaleMag = this.settingInitDet.docScaleMag;
-            imSize = size( im ); imSize = imSize( 1 : 2 );
-            imTargetSize = round( imSize * sqrt( docScaleMag ) );
-            center = round( imTargetSize / 2 );
-            imTl = center - round( imSize / 2 ) + 1;
-            imBr = imTl + imSize - 1;
-            imBgd = imresize( uint8( this.avgIm ), imTargetSize );
-            imBgd( imTl( 1 ) : imBr( 1 ), imTl( 2 ) : imBr( 2 ), : ) = im;
-            imMag = imBgd;
             % Pre-filtering by initial guess.
-            preBound = this.settingInitDet.preBoundInitGuess;
             fprintf( '%s: Initial guess.\n', upper( mfilename ) );
-            [ rid2pred, rid2tlbr ] = this.initGuess( imMag );
-            predsTl = rid2pred( 1 : this.signNoObj, : );
-            predsBr = rid2pred( this.signNoObj + 1 : end, : );
+            [ rid2out, rid2tlbr, imGlobal, sideMargin ] = ...
+                this.initGuess( im );
+            predsTl = rid2out( 1 : this.signNoObj, : );
+            predsBr = rid2out( this.signNoObj + 1 : end, : );
             [ ~, predsTl ] = max( predsTl, [  ], 1 );
             [ ~, predsBr ] = max( predsBr, [  ], 1 );
             rid2ok = predsTl == 2 & predsBr == 2;
@@ -434,12 +441,6 @@ classdef DetSingleCls < handle
                 rid2det = zeros( 4, 0 );
                 rid2out = zeros( this.signNoObj * 2, 0 );
                 return;
-            end;
-            if preBound,
-                bnd = [ imTl( : ); imBr( : ); ];
-                [ rid2tlbr, ~ ] = bndtlbr( rid2tlbr, bnd );
-                rid2tlbr = bsxfun( @minus, rid2tlbr, [ imTl( : ); imTl( : ); ] ) + 1;
-                imMag = im;
             end;
             % Do detection on each region.
             testBatchSize = 256;
@@ -453,17 +454,16 @@ classdef DetSingleCls < handle
                 bregns = rid2tlbr( :, brids );
                 cnt = cnt + 1;
                 [ rid2det{ cnt }, rid2out{ cnt } ] = ...
-                    this.detMultiRegns( bregns, imMag, dvecLength );
+                    this.detMultiRegns( bregns, imGlobal, dvecLength );
             end;
             rid2det = cat( 2, rid2det{ : } );
             rid2out = cat( 2, rid2out{ : } );
             % Convert to original image domain.
-            if ~preBound,
-                bnd = [ imTl( : ); imBr( : ); ];
-                [ rid2det, ok ] = bndtlbr( rid2det, bnd );
-                rid2out = rid2out( :, ok );
-                rid2det = bsxfun( @minus, rid2det, [ imTl( : ); imTl( : ); ] ) + 1;
-            end;
+            imGlobalSize = [ size( imGlobal, 1 ); size( imGlobal, 2 ); ];
+            bnd = [ sideMargin + 1; imGlobalSize - sideMargin; ];
+            [ rid2det, ok ] = bndtlbr( rid2det, bnd );
+            rid2out = rid2out( :, ok );
+            rid2det = bsxfun( @minus, rid2det, [ sideMargin; sideMargin; ] );
         end
         function [ did2tlbr, did2out ] = detMultiRegns( this, rid2tlbr, im, dvecLength )
             % Set parameters.
@@ -475,8 +475,8 @@ classdef DetSingleCls < handle
             numRegn = size( rid2tlbr, 2 );
             % Detection on each region.
             im = single( im );
-            avgIm_ = this.avgIm;
-            if useGpu, avgIm_ = gpuArray( avgIm_ ); end;
+            rgbMean_ = this.rgbMean;
+            if useGpu, rgbMean_ = gpuArray( rgbMean_ ); end;
             idx2im = zeros( inputSide, inputSide, inputCh, numRegn, 'single' );
             parfor r = 1 : numRegn,
                 imRegn = im( ...
@@ -493,7 +493,7 @@ classdef DetSingleCls < handle
                 fprintf( '%s: %dth feed. %d ims.\n', upper( mfilename ), feed, numIm );
                 % Feed-forward.
                 if useGpu, idx2im = gpuArray( single( idx2im ) ); end;
-                idx2im = bsxfun( @minus, idx2im, avgIm_ );
+                idx2im = bsxfun( @minus, idx2im, rgbMean_ );
                 idx2out = my_simplenn( ...
                     this.attNet, idx2im, [  ], [  ], ...
                     'accumulate', false, ...
@@ -544,71 +544,88 @@ classdef DetSingleCls < handle
                     idx2im( :, :, :, idx ) = ...
                         imresize( imRegn, [ inputSide, inputSide ] );
                 end;
-            end;  clear avgIm_;
+            end;  clear rgbMean_;
             rid2ok = ~sum( rid2tlbr, 1 );
             rid2tlbr( :, rid2ok ) = [  ];
             rid2out( :, rid2ok ) = [  ];
             did2tlbr = rid2tlbr;
             did2out = rid2out;
         end
-        function [ rid2pred, rid2tlbr ] = initGuess( this, im )
+        % Next task 1) Modify this.avgIm part.
+        % Next task 2) Add scale/aspect selection option for further tuning.
+        function [ rid2out, rid2tlbr, imGlobal, sideMargin ] = ...
+                initGuess( this, im ) % This image is original.
             % Prepare settings and data.
-            targetLayerId = numel( this.attNet.layers ) - 1;
-            interpolationMethod = this.attNet.normalization.interpolation;
-            cnnInputSide = size( this.avgIm, 1 );
-            imSize = size( im )'; r = imSize( 1 ); c = imSize( 2 );
-            scaleStep = this.settingInitDet.scaleStep;
-            numScale = this.settingInitDet.numScale;
-            startHorzScale = this.settingInitDet.startHorzScale;
-            horzScaleStep = this.settingInitDet.horzScaleStep;
-            numHorzScale = ( this.settingInitDet.endHorzScale - startHorzScale ) / horzScaleStep + 1;
-            % Define multiple image sizes: Becore modification.
-            % imSizeMin = [ r, c ] / min( r, c ) * cnnInputSide;
-            % targetImSizes = zeros( 2, numScale * numHorzScale );
-            % idx = 0;
-            % for s = 1 : numScale,
-            %     scale = scaleStep ^ ( ( s - 1 ) * 0.5 );
-            %     imSize_ = scale * imSizeMin;
-            %     for h = 1 : numHorzScale,
-            %         imSize_( 2 ) = imSize_( 2 ) * ( startHorzScale + horzScaleStep * ( h - 1 ) );
-            %         idx = idx + 1;
-            %         targetImSizes( :, idx ) = imSize_;
-            %     end;
-            % end;
-            % targetImSizes = round( targetImSizes );
-            % Define multiple image sizes: Becore modification: After modification.
-            targetImSizes = zeros( 2, numScale * numHorzScale );
-            idx = 0;
-            for h = 1 : numHorzScale;
-                hs = ( startHorzScale + horzScaleStep * ( h - 1 ) );
-                imSizeAspect = [ r; c * hs; ];
-                for s = 1 : numScale,
-                    idx = idx + 1;
-                    imSizeScale = imSizeAspect / min( imSizeAspect ) * cnnInputSide;
-                    scale = scaleStep ^ ( ( s - 1 ) * 0.5 );
-                    targetImSizes( :, idx ) = scale * imSizeScale';
+            patchMargin = this.settingInitDet.patchMargin;
+            numAspect = numel( this.aspects );
+            numScale = numel( this.scales );
+            interpolation = this.attNet.normalization.interpolation;
+            lyid = numel( this.attNet.layers ) - 1;
+            % Do the job.
+            imSize = size( im ); imSize = imSize( 1 : 2 ); imSize = imSize( : );
+            pside0 = min( imSize ) / patchMargin;
+            cnt = 0;
+            rid2tlbr = cell( numScale * numAspect, 1 );
+            rid2out = cell( numScale * numAspect, 1 );
+            for s = 1 : numScale,
+                pside = pside0 / this.scales( s );
+                for a = 1 : numAspect,
+                    psider = pside;
+                    psidec = pside / this.aspects( a );
+                    mar2im = round( [ psider; psidec ] * patchMargin );
+                    bnd = [ 1 - mar2im; imSize + mar2im ];
+                    srcr = bnd( 3 ) - bnd( 1 ) + 1;
+                    srcc = bnd( 4 ) - bnd( 2 ) + 1;
+                    dstr = round( this.patchSize * srcr / psider );
+                    dstc = round( this.patchSize * srcc / psidec );
+                    if dstr * dstc > 2859 * 5448,
+                        fprintf( '%s: Warning) Im of s%d a%d rejected.\n', ...
+                            upper( mfilename ), s, a ); continue;
+                    end;
+                    im_ = cropAndNormalizeIm...
+                        ( single( im ), imSize, bnd, this.rgbMean );
+                    im_ = imresize( im_, [ dstr, dstc ], ...
+                        'method', interpolation );
+                    % Feed-foreward.
+                    if isa( this.attNet.layers{ 1 }.weights{ 1 }, 'gpuArray' ), 
+                        im_ = gpuArray( im_ ); end;
+                    res = my_simplenn( ...
+                        this.attNet, im_, [  ], [  ], ...
+                        'accumulate', false, ...
+                        'disableDropout', true, ...
+                        'conserveMemory', true, ...
+                        'backPropDepth', +inf, ...
+                        'targetLayerId', lyid, ...
+                        'sync', true ); clear im_;
+                    % Form activations.
+                    outs = gather( res( lyid + 1 ).x ); clear res;
+                    [ nr, nc, z ] = size( outs );
+                    outs = reshape( permute( outs, [ 3, 1, 2 ] ), z, nr * nc );
+                    % Form geometries.
+                    r = ( ( 1 : nr ) - 1 ) * this.stride + 1;
+                    c = ( ( 1 : nc ) - 1 ) * this.stride + 1;
+                    [ c, r ] = meshgrid( c, r );
+                    regns = cat( 3, r, c );
+                    regns = cat( 3, regns, regns + this.patchSize - 1 );
+                    regns = reshape( permute( regns, [ 3, 1, 2 ] ), 4, nr * nc );
+                    regns = cat( 1, regns, ...
+                        s * ones( 1, nr * nc  ), ...
+                        a * ones( 1, nr * nc  ) );
+                    % Back projection.
+                    regns = resizeTlbr( regns, [ dstr; dstc; ], [ srcr; srcc; ] );
+                    regns( 1 : 4, : ) = round( bsxfun( @minus, regns( 1 : 4, : ), [ mar2im; mar2im; ] ) );
+                    cnt = cnt + 1;
+                    rid2tlbr{ cnt } = regns;
+                    rid2out{ cnt } = outs;
                 end;
             end;
-            targetImSizes = round( targetImSizes );
-            % Reject over-memory image.
-            targetImArea = prod( targetImSizes, 1 );
-            reject = targetImArea > 2859 * 5448;
-            if sum( reject ),
-                fprintf( '%s: Warning) %d scaled im rejected.\n', upper( mfilename ), sum( reject ) );
-                targetImSizes( :, reject ) = [  ];
-            end
-            % Do the job.
-            [ rid2tlbr, rid2pred ] = ...
-                extActivationMap( ...
-                im, ...
-                this.avgIm, ...
-                this.attNet, ...
-                targetLayerId, ...
-                targetImSizes, ...
-                interpolationMethod, ...
-                this.patchSize, ...
-                this.stride, ...
-                '' );
+            rid2tlbr = cat( 2, rid2tlbr{ : } );
+            rid2out = cat( 2, rid2out{ : } );
+            mar2im = 1 - min( rid2tlbr( 1 : 2, : ), [  ], 2 );
+            rid2tlbr( 1 : 4, : ) = bsxfun( @plus, rid2tlbr( 1 : 4, : ), [ mar2im; mar2im; ] );
+            imGlobal = cropAndNormalizeIm...
+                ( single( im ), imSize, [ 1 - mar2im; imSize + mar2im ], this.rgbMean );
+            sideMargin = mar2im;
         end
         function reportTestResult...
                 ( this, ap, addrss )
@@ -652,72 +669,37 @@ classdef DetSingleCls < handle
         function determineInOutRelations( this, gpus )
             % Determine patch size.
             targetLyrId = numel( this.attNet.layers ) - 1;
-            [ r, c, z ] = size( this.avgIm );
+            psize = this.attNet.srcInOut.settingTsDb.dstSide;
+            ch = numel( this.rgbMean );
             while true,
                 try
-                    im = zeros( r, c, z, 'single' );
+                    im = zeros( psize, psize, ch, 'single' );
                     if ~isempty( gpus ), im = gpuArray( im ); end;
                     my_simplenn( ...
                         this.attNet, im, [  ], [  ], ...
                         'targetLayerId', targetLyrId );
                     clear im; clear ans;
-                    r = r - 1;
+                    psize = psize - 1;
                 catch
-                    r = r + 1;
-                    break;
-                end
-            end
-            while true,
-                try
-                    im = zeros( r, c, z, 'single' );
-                    if ~isempty( gpus ), im = gpuArray( im ); end;
-                    my_simplenn( ...
-                        this.attNet, im, [  ], [  ], ...
-                        'targetLayerId', targetLyrId );
-                    clear im; clear ans;
-                    c = c - 1;
-                catch
-                    c = c + 1;
+                    psize = psize + 1;
                     break;
                 end;
-            end;
+            end
             % Determine patch stride.
-            strdR = 0;
+            strd = 0;
             while true,
-                im = zeros( r + strdR, c, z, 'single' );
+                im = zeros( psize + strd, psize, ch, 'single' );
                 if ~isempty( gpus ), im = gpuArray( im ); end;
                 res = my_simplenn( ...
                     this.attNet, im, [  ], [  ], ...
                     'targetLayerId', targetLyrId );
                 desc = res( targetLyrId + 1 ).x;
                 if size( desc, 1 ) == 2, break; end;
-                strdR = strdR + 1;
+                strd = strd + 1;
                 clear im; clear res;
             end;
-            strdC = 0;
-            while true,
-                im = zeros( r, c + strdC, z, 'single' );
-                if ~isempty( gpus ), im = gpuArray( im ); end;
-                res = my_simplenn( ...
-                    this.attNet, im, [  ], [  ], ...
-                    'targetLayerId', targetLyrId );
-                desc = res( targetLyrId + 1 ).x;
-                if size( desc, 2 ) == 2, break; end;
-                strdC = strdC + 1;
-                clear im; clear res;
-            end
-            this.patchSize = [ r, c ];
-            this.stride = [ strdR, strdC ];
-            % [ r, c, ~ ] = size( this.avgIm );
-            % strd = 1;
-            % numLyr = numel( this.attNet.layers );
-            % for lid = 1 : numLyr,
-            %     lyr = this.attNet.layers{ lid };
-            %     if isfield( lyr, 'stride' ), 
-            %         strd = strd * lyr.stride( 1 ); end; 
-            % end;
-            % this.patchSize = [ r, c ];
-            % this.stride = [ strd, strd ];
+            this.patchSize = psize;
+            this.stride = strd;
         end
         % Functions for identification.
         function name = getName( this )
