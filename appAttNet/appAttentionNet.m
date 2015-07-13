@@ -28,7 +28,7 @@ setting.io.tsDb.minObjScale                         = 1 / sqrt( 2 );
 setting.io.tsDb.numErode                            = 5;
 setting.io.tsNet.pretrainedNetName                  = path.net.vgg_m.name;
 setting.io.tsNet.suppressPretrainedLayerLearnRate   = 1 / 10;
-setting.io.tsNet.outFilterDepth                     = 4096; % Strange..
+setting.io.tsNet.outFilterDepth                     = 2048; % Strange..
 setting.io.general.dstSide                          = 227;
 setting.io.general.dstCh                            = 3;
 setting.io.general.batchSize                        = 128 * numel( setting.gpus );
@@ -47,15 +47,15 @@ setting.app.initDet.horzScaleStep                   = 0.5;
 setting.app.initDet.endHorzScale                    = 2;
 setting.app.initDet.preBoundInitGuess               = false;
 setting.app.initMrg.method                          = 'NMS';
-setting.app.initMrg.overlap                         = 1; % 0.8;
-setting.app.initMrg.minNumSuppBox                   = 0; % 1;
+setting.app.initMrg.overlap                         = 0.8; % 1;
+setting.app.initMrg.minNumSuppBox                   = 1; % 0;
 setting.app.initMrg.mergeType                       = 'WAVG';
 setting.app.initMrg.scoreType                       = 'AVG';
 setting.app.refine.dvecLength                       = 30;
 setting.app.refine.boxScaleMag                      = 2.5;
 setting.app.refine.method                           = 'OV';
 setting.app.refine.overlap                          = 0.5;
-setting.app.refine.minNumSuppBox                    = 1; % 0;
+setting.app.refine.minNumSuppBox                    = 0; % 1;
 setting.app.refine.mergeType                        = 'WAVG';
 setting.app.refine.scoreType                        = 'AVG';
 db = Db( setting.db, path.dstDir );
@@ -97,26 +97,31 @@ app.refineDet( 1 );
 
 
 %% DEV.
-% clc; clearvars -except db io net path setting app;
-% iids = 3314; db.getTeiids;
+clc; clearvars -except db io net path setting app;
+iids = db.getTeiids;
+iids = iids( 4500 / 2 : 4600 / 2 );
 % app.settingInitMrg.overlap = 1;
 % app.settingInitMrg.minNumSuppBox = 0;
 % app.settingRefine.minNumSuppBox = 1;
-% app.settingInitMrg.overlap = 0.8;
-% app.settingInitMrg.minNumSuppBox = 1;
-% app.settingRefine.minNumSuppBox = 0;
-% for iid = iids',
-%     im = imread( db.iid2impath{ iid } );
-%     did2tlbr = app.iid2det0( iid );
-%     figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } );
-%     did2tlbr = app.iid2det( iid );
-%     figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
-%     if ~isempty( did2tlbr )
-%         did2tlbr = app.im2redet( im, did2tlbr );
-%     end
-%     figure( 3 ); plottlbr( did2tlbr, im, false, 'c' );
-%     if numel( iids ) ~= 1, waitforbuttonpress; end;
-% end;
+app.settingInitMrg.overlap = 0.8;
+app.settingInitMrg.minNumSuppBox = 1;
+app.settingRefine.minNumSuppBox = 0;
+for iid = iids',
+    im = imread( db.iid2impath{ iid } );
+    did2tlbr = app.iid2det0( iid );
+    figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } );
+    did2tlbr = app.iid2det( iid );
+    figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
+    if ~isempty( did2tlbr )
+        did2tlbr = app.im2redet( im, did2tlbr );
+    end
+    figure( 3 ); plottlbr( did2tlbr, im, false, 'c' );
+    if numel( iids ) ~= 1, waitforbuttonpress; end;
+end;
+
+
+
+
 
 
 %% PR.
@@ -140,3 +145,12 @@ app.refineDet( 1 );
 % xlabel( 'Recall' );
 % ylabel( 'Precision' );
 % hold on;
+
+
+
+
+
+
+
+
+

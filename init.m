@@ -32,6 +32,8 @@ path.net.vgg_s.name                     = 'VGGS';
 path.net.vgg_s.path                     = '/iron/net/imagenet-vgg-s.mat';
 path.net.vgg_m.name                     = 'VGGM';
 path.net.vgg_m.path                     = '/iron/net/imagenet-vgg-m.mat';
+path.net.vgg_m_2048.name                = 'VGGM2048';
+path.net.vgg_m_2048.path                = '/iron/net/imagenet-vgg-m-2048.mat';
 path.net.ddsm.name                      = 'DDSM';
 path.net.ddsm.path                      = '/iron/net/ddsm-ft-alex.mat';
 % Do not touch the following codes.

@@ -75,7 +75,20 @@ classdef Net < handle
                         upper( mfilename ), epch - 1 );
                     this.loadNetAt( epch - 1 );
                     this.currentEpch = epch - 1;
-                end
+                end;
+                % Reset momentum as learning rate changes.
+                prevLr = this.setting.learningRate( max( 1, epch - 1 ) );
+                currLr = this.setting.learningRate( epch );
+                if prevLr ~= currLr,
+                    fprintf( '%s: Learning rate changed. Reset momentum.\n', upper( mfilename ) );
+                    for l = 1 : numel( this.layers ),
+                        if isfield( this.layers{ l }, 'momentum' ),
+                            for w = 1 : numel( this.layers{ l }.momentum ),
+                                this.layers{ l }.momentum{ w } = this.layers{ l }.momentum{ w } * 0;
+                            end;
+                        end;
+                    end;
+                end;
                 % Copy layers.
                 net.layers = this.layers;
                 % Fetch network on gpu.

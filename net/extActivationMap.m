@@ -60,6 +60,8 @@ function [ rid2geo, rid2desc ] = ...
         geo( 4, : ) = geo( 2, : ) + patchSize( 2 ) - 1;
         geo( 1 : 4, : ) = resizeTlbr( geo( 1 : 4, : ), imSize_, orgImSize );
         geo( 1 : 2, : ) = max( 1, geo( 1 : 2, : ) );
+        geo( 3, : ) = min( orgImSize( 1 ), geo( 3, : ) );
+        geo( 4, : ) = min( orgImSize( 2 ), geo( 4, : ) );
         sid2rid2geo{ sid } = round( geo );
     end % Next scale.
     % Aggregate for each layer.

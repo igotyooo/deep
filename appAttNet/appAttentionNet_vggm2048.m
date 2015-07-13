@@ -1,9 +1,9 @@
-%% SET PARAMETERS ONLY.
+%% SET PARAMETERS ONLY.nnp
 clc; close all; fclose all; clear all; 
-reset( gpuDevice( 1 ) );
+reset( gpuDevice( 2 ) ); 
 addpath( genpath( '..' ) ); init;
 setting.db                                          = path.db.voc2007;
-setting.gpus                                        = 1;
+setting.gpus                                        = 2;
 setting.io.tsDb.selectClassName                     = 'person';
 setting.io.tsDb.stride                              = 32;
 setting.io.tsDb.dstSide                             = 227;
@@ -26,9 +26,9 @@ setting.io.tsDb.numMaxBgdRegnPerScale               = 100;
 setting.io.tsDb.stopSignError                       = 5;
 setting.io.tsDb.minObjScale                         = 1 / sqrt( 2 );
 setting.io.tsDb.numErode                            = 5;
-setting.io.tsNet.pretrainedNetName                  = path.net.vgg_m.name;
+setting.io.tsNet.pretrainedNetName                  = path.net.vgg_m_2048.name; %%%
 setting.io.tsNet.suppressPretrainedLayerLearnRate   = 1 / 10;
-setting.io.tsNet.outFilterDepth                     = 2048; % Strange..
+setting.io.tsNet.outFilterDepth                     = 2048; %%%
 setting.io.general.dstSide                          = 227;
 setting.io.general.dstCh                            = 3;
 setting.io.general.batchSize                        = 128 * numel( setting.gpus );
@@ -36,7 +36,7 @@ setting.net.normalizeImage                          = 'AVGIM'; % 'RGBMEAN';
 setting.net.weightDecay                             = 0.0005;
 setting.net.momentum                                = 0.9;
 setting.net.modelType                               = 'dropout';
-setting.net.learningRate                            = [ 0.01 * ones( 1, 8 ), 0.001 * ones( 1, 2 ) ]; % logspace( -2, -4, 15 );
+setting.net.learningRate                            = [ 0.01 * ones( 1, 8 ), 0.001 * ones( 1, 3 ), 0.0001 * ones( 1, 2 ) ]; % [ 0.01 * ones( 1, 8 ), 0.001 * ones( 1, 2 ) ];
 setting.app.initDet.scaleStep                       = 2;
 setting.app.initDet.numScale                        = 7; %%
 setting.app.initDet.dvecLength                      = 30;
@@ -47,20 +47,20 @@ setting.app.initDet.horzScaleStep                   = 0.5;
 setting.app.initDet.endHorzScale                    = 2;
 setting.app.initDet.preBoundInitGuess               = false;
 setting.app.initMrg.method                          = 'NMS';
-setting.app.initMrg.overlap                         = 1; % 0.8;
-setting.app.initMrg.minNumSuppBox                   = 0; % 1;
+setting.app.initMrg.overlap                         = 0.8; % 1;
+setting.app.initMrg.minNumSuppBox                   = 1; % 0;
 setting.app.initMrg.mergeType                       = 'WAVG';
 setting.app.initMrg.scoreType                       = 'AVG';
 setting.app.refine.dvecLength                       = 30;
 setting.app.refine.boxScaleMag                      = 2.5;
 setting.app.refine.method                           = 'OV';
 setting.app.refine.overlap                          = 0.5;
-setting.app.refine.minNumSuppBox                    = 1; % 0;
+setting.app.refine.minNumSuppBox                    = 0; % 1;
 setting.app.refine.mergeType                        = 'WAVG';
 setting.app.refine.scoreType                        = 'AVG';
 db = Db( setting.db, path.dstDir );
 db.genDb;
-io = InOutDetSingleCls( db, ...
+io = InOutDetSingleCls2048( db, ...
     setting.io.tsDb, ...
     setting.io.tsNet, ...
     setting.io.general );
@@ -93,23 +93,24 @@ app.refineDet( 1 );
     ( 'visionresearchreport@gmail.com' );
 
 
+
+
+
 %% DEV.
-clc; clearvars -except db io net path setting app;
-iids = db.getTeiids;
-for iid = iids',
-    im = imread( db.iid2impath{ iid } );
-    did2tlbr = app.iid2det0( iid );
-    figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } );
-    did2tlbr = app.iid2det( iid );
-    figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
-    if ~isempty( did2tlbr )
-        did2tlbr = app.im2redet( im, did2tlbr );
-    end
-    figure( 3 ); plottlbr( did2tlbr, im, false, 'c' );
-    if numel( iids ) ~= 1, waitforbuttonpress; end;
-end;
-
-
+% clc; clearvars -except db io net path setting app;
+% iids = 3323; db.getTeiids;
+% for iid = iids',
+%     im = imread( db.iid2impath{ iid } );
+%     did2tlbr = app.iid2det0( iid );
+%     figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } ); title( num2str( size( did2tlbr, 2 ) ) );
+%     did2tlbr = app.iid2det( iid );
+%     figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
+%     if ~isempty( did2tlbr )
+%         did2tlbr = app.im2redet( im, did2tlbr );
+%     end;
+%     figure( 3 ); plottlbr( did2tlbr, im, false, 'c' );
+%     if numel( iids ) ~= 1, waitforbuttonpress; end;
+% end;
 
 
 %% PR.
