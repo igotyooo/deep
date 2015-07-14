@@ -40,7 +40,7 @@ setting.app.initDet.numMaxTest                      = 50;
 setting.app.initDet.patchMargin                     = 0.5;
 setting.app.initDet.numAspect                       = 16 / 2;
 setting.app.initDet.confidence                      = 0.97;
-setting.app.initMrg.selectScaleIds                  = 1 : setting.app.initDet.numScale;
+setting.app.initMrg.selectScaleIds                  = 1 : setting.app.initDet.numScale; %%%
 setting.app.initMrg.selectAspectIds                 = 1 : setting.app.initDet.numAspect;
 setting.app.initMrg.method                          = 'NMS';
 setting.app.initMrg.overlap                         = 0.8;
@@ -96,9 +96,10 @@ app.refineDet( 1 );
 
 %% DEV.
 % clc; clearvars -except db io net path setting app;
-% % cid = find( cellfun( @( name )strcmp( name, io.settingTsDb.selectClassName ), db.cid2name ) );
-% % iids = setdiff( unique( db.oid2iid( db.oid2cid == cid ) ), find( db.iid2setid == 1 ) );
-% iids = 2614; db.getTeiids;
+% cid = find( cellfun( @( name )strcmp( name, io.settingTsDb.selectClassName ), db.cid2name ) );
+% iids = setdiff( unique( db.oid2iid( db.oid2cid == cid ) ), find( db.iid2setid == 1 ) );
+% iids = iids( 1 : end );
+% % iids = 517; db.getTeiids;
 % for iid = iids',
 %     im = imread( db.iid2impath{ iid } );
 %     did2tlbr = app.iid2det0( iid );
@@ -120,7 +121,8 @@ app.refineDet( 1 );
 % res = res1;
 % fp = cumsum( res.rank2fp );
 % tp = cumsum( res.rank2tp );
-% npos = sum( db.oid2cid( unique( cat( 1, db.iid2oids{ db.iid2setid == 2 } ) ) ) == 15 & ( ~db.oid2diff( unique( cat( 1, db.iid2oids{ db.iid2setid == 2 } ) ) ) ) );
+% cid = find( cellfun( @( name )strcmp( name, io.settingTsDb.selectClassName ), db.cid2name ) );
+% npos = sum( db.oid2cid( unique( cat( 1, db.iid2oids{ db.iid2setid == 2 } ) ) ) == cid & ( ~db.oid2diff( unique( cat( 1, db.iid2oids{ db.iid2setid == 2 } ) ) ) ) );
 % rec = tp / npos;
 % prec = tp ./ ( fp + tp );
 % ap = 0;

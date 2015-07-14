@@ -170,6 +170,7 @@ classdef DetSingleCls < handle
                     if ~isempty( did2det );
                         % Do the job.
                         im = imread( this.db.iid2impath{ iid } );
+                        fprintf( '%s: Re-det.\n', upper( mfilename ) );
                         [ did2redet, did2rescore ] = this.im2redet( im, did2det );
                         res.did2iid{ iidx } = iid * ones( size( did2redet, 2 ), 1 );
                         res.did2score{ iidx } = did2rescore;
@@ -193,7 +194,7 @@ classdef DetSingleCls < handle
             this.did2score = res.did2score;
             this.refineId = refineId;
         end
-        function [ did2redet, did2rescore ] = im2redet( this, im, did2det )
+        function [ did2redet, did2rescore ] = im2redet( this, im, did2tlbr0 )
             % Set parameters.
             docScaleMag = 4;
             boxScaleMag = this.settingRefine.boxScaleMag;
@@ -203,46 +204,39 @@ classdef DetSingleCls < handle
             mergeType = this.settingRefine.mergeType;
             scoreType = this.settingRefine.scoreType;
             dvecLength = this.settingRefine.dvecLength;
-            % Augment document size.
-            imSize = size( im ); imSize = imSize( 1 : 2 );
-            imTargetSize = round( imSize * sqrt( docScaleMag ) );
-            center = round( imTargetSize / 2 );
-            imTl = center - round( imSize / 2 ) + 1;
-            imBr = imTl + imSize - 1;
-            imBgd = imresize( uint8( this.rgbMean ), imTargetSize );
-            imBgd( imTl( 1 ) : imBr( 1 ), imTl( 2 ) : imBr( 2 ), : ) = im;
-            imMag = imBgd;
-            did2det = bsxfun( @plus, did2det, [ imTl( : ); imTl( : ); ] ) - 1;
             % Make re-initilized bounding boxes.
-            [ nr, nc, ~ ] = size( imMag );
-            did2size = tlbr2rect( did2det );
+            did2size = tlbr2rect( did2tlbr0 );
             did2size = did2size( [ 4, 3 ], : );
             did2tsize = did2size * sqrt( boxScaleMag );
-            did2center = [ sum( did2det( [ 1, 3 ], : ), 1 ); sum( did2det( [ 2, 4 ], : ), 1 ) ] / 2;
-            did2reinit = zeros( size( did2det ) );
-            did2reinit( 1 : 2, : ) = did2center - round( did2tsize / 2 );
-            did2reinit( 3 : 4, : ) = did2center + round( did2tsize / 2 );
-            did2reinit = round( bndtlbr( did2reinit, [ 1; 1; nr; nc; ] ) );
+            did2center = [ sum( did2tlbr0( [ 1, 3 ], : ), 1 ); sum( did2tlbr0( [ 2, 4 ], : ), 1 ) ] / 2;
+            did2tlbr0_ = zeros( size( did2tlbr0 ) );
+            did2tlbr0_( 1 : 2, : ) = round( did2center - did2tsize / 2 );
+            did2tlbr0_( 3 : 4, : ) = round( did2center + did2tsize / 2 );
+            imSize = size( im ); imSize = imSize( 1 : 2 ); imSize = imSize( : );
+            imTl = min( did2tlbr0_( 1 : 2, : ), [  ], 2 );
+            imBr = max( did2tlbr0_( 3 : 4, : ), [  ], 2 );
+            imGlobal = cropAndNormalizeIm...
+                ( single( im ), imSize, [ imTl; imBr ], this.rgbMean );
+            did2tlbr0_( 1 : 4, : ) = bsxfun( @minus, did2tlbr0_( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
             % Restart detection.
             testBatchSize = 256;
-            numDet = size( did2reinit, 2 );
+            numDet = size( did2tlbr0_, 2 );
             did2redet = cell( numel( 1 : testBatchSize : numDet ), 1 );
             did2reout = cell( numel( 1 : testBatchSize : numDet ), 1 );
             cnt = 0;
             for d = 1 : testBatchSize : numDet,
                 bdids = d : min( d + testBatchSize - 1, numDet );
-                bregns = did2reinit( :, bdids );
+                bregns = did2tlbr0_( :, bdids );
                 cnt = cnt + 1;
                 [ did2redet{ cnt }, did2reout{ cnt } ] = ...
-                    this.detMultiRegns( bregns, imMag, dvecLength );
+                    this.detMultiRegns( bregns, imGlobal, dvecLength );
             end;
             did2redet = cat( 2, did2redet{ : } );
             did2reout = cat( 2, did2reout{ : } );
             % Back to original image domain.
-            bnd = [ imTl( : ); imBr( : ); ];
-            [ did2redet, ok ] = bndtlbr( did2redet, bnd );
+            did2redet( 1 : 4, : ) = bsxfun( @plus, did2redet( 1 : 4, : ), [ imTl; imTl; ] ) - 1;
+            [ did2redet, ok ] = bndtlbr( did2redet, [ 1; 1; imSize; ] );
             did2reout = did2reout( :, ok );
-            did2redet = bsxfun( @minus, did2redet, [ imTl( : ); imTl( : ); ] ) + 1;
             % Compute detection scores.
             did2outTl = did2reout( 1 : this.signNoObj, : );
             did2outBr = did2reout( this.signNoObj + 1 : end, : );
@@ -452,10 +446,10 @@ classdef DetSingleCls < handle
             [ ~, predsTl ] = max( predsTl, [  ], 1 );
             [ ~, predsBr ] = max( predsBr, [  ], 1 );
             rid2ok = predsTl == 2 & predsBr == 2;
-            rid2tlbr = rid2tlbr( 1 : 4, rid2ok );
+            rid2tlbr = rid2tlbr( :, rid2ok );
             if isempty( rid2tlbr ), 
                 fprintf( '%s: No object.\n', upper( mfilename ) );
-                rid2det = zeros( 4, 0 );
+                rid2det = zeros( 4 + 2, 0 );
                 rid2out = zeros( this.signNoObj * 2, 0 );
                 return;
             end;
@@ -480,7 +474,7 @@ classdef DetSingleCls < handle
             bnd = [ sideMargin + 1; imGlobalSize - sideMargin; ];
             [ rid2det, ok ] = bndtlbr( rid2det, bnd );
             rid2out = rid2out( :, ok );
-            rid2det = bsxfun( @minus, rid2det, [ sideMargin; sideMargin; ] );
+            rid2det( 1 : 4, : ) = bsxfun( @minus, rid2det( 1 : 4, : ), [ sideMargin; sideMargin; ] );
         end
         function [ did2tlbr, did2out ] = detMultiRegns( this, rid2tlbr, im, dvecLength )
             % Set parameters.
@@ -492,8 +486,6 @@ classdef DetSingleCls < handle
             numRegn = size( rid2tlbr, 2 );
             % Detection on each region.
             im = single( im );
-            rgbMean_ = this.rgbMean;
-            if useGpu, rgbMean_ = gpuArray( rgbMean_ ); end;
             idx2im = zeros( inputSide, inputSide, inputCh, numRegn, 'single' );
             parfor r = 1 : numRegn,
                 imRegn = im( ...
@@ -510,7 +502,6 @@ classdef DetSingleCls < handle
                 fprintf( '%s: %dth feed. %d ims.\n', upper( mfilename ), feed, numIm );
                 % Feed-forward.
                 if useGpu, idx2im = gpuArray( single( idx2im ) ); end;
-                idx2im = bsxfun( @minus, idx2im, rgbMean_ );
                 idx2out = my_simplenn( ...
                     this.attNet, idx2im, [  ], [  ], ...
                     'accumulate', false, ...
@@ -548,7 +539,7 @@ classdef DetSingleCls < handle
                     h = rid2tlbr( 3, rid ) - rid2tlbr( 1, rid ) + 1;
                     tlbr = idx2tlbr( :, idx );
                     tlbr = resizeTlbr( tlbr, [ inputSide, inputSide ], [ h, w ] );
-                    rid2tlbr( :, rid ) = tlbr + [ rid2tlbr( 1 : 2, rid ); rid2tlbr( 1 : 2, rid ) ] - 1;
+                    rid2tlbr( 1 : 4, rid ) = tlbr + [ rid2tlbr( 1 : 2, rid ); rid2tlbr( 1 : 2, rid ) ] - 1;
                 end;
                 rid2tlbr = round( rid2tlbr );
                 % Preparing for next feed-forward.
@@ -568,8 +559,6 @@ classdef DetSingleCls < handle
             did2tlbr = rid2tlbr;
             did2out = rid2out;
         end
-        % Next task 1) Modify this.avgIm part.
-        % Next task 2) Add scale/aspect selection option for further tuning.
         function [ rid2out, rid2tlbr, imGlobal, sideMargin ] = ...
                 initGuess( this, im ) % This image is original.
             % Prepare settings and data.
