@@ -40,6 +40,8 @@ setting.app.initDet.numMaxTest                      = 50;
 setting.app.initDet.patchMargin                     = 0.5;
 setting.app.initDet.numAspect                       = 16 / 2;
 setting.app.initDet.confidence                      = 0.97;
+setting.app.initMrg.selectScaleIds                  = 1 : setting.app.initDet.numScale;
+setting.app.initMrg.selectAspectIds                 = 1 : setting.app.initDet.numAspect;
 setting.app.initMrg.method                          = 'NMS';
 setting.app.initMrg.overlap                         = 0.8;
 setting.app.initMrg.minNumSuppBox                   = 1;
@@ -95,18 +97,20 @@ app.refineDet( 1 );
 %% DEV.
 % clc; clearvars -except db io net path setting app;
 % % cid = find( cellfun( @( name )strcmp( name, io.settingTsDb.selectClassName ), db.cid2name ) );
-% % iids = setdiff( unique( db.oid2iid( db.oid2cid == cid ) ), db.iid2setid == 1 );
-% iids = db.getTeiids;
+% % iids = setdiff( unique( db.oid2iid( db.oid2cid == cid ) ), find( db.iid2setid == 1 ) );
+% iids = 2614; db.getTeiids;
 % for iid = iids',
 %     im = imread( db.iid2impath{ iid } );
 %     did2tlbr = app.iid2det0( iid );
 %     figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } );
 %     did2tlbr = app.iid2det( iid );
 %     figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
+%     did2str = {  };
 %     if ~isempty( did2tlbr )
-%         did2tlbr = app.im2redet( im, did2tlbr );
+%         [ did2tlbr, did2rescore ]= app.im2redet( im, did2tlbr );
+%         did2str = cellfun( @num2str, num2cell( did2rescore ), 'uniformOutput', false );
 %     end
-%     figure( 3 ); plottlbr( did2tlbr, im, false, 'c' );
+%     figure( 3 ); plottlbr( did2tlbr, im, false, 'c', did2str );
 %     title( num2str( iid ) );
 %     if numel( iids ) ~= 1, waitforbuttonpress; end;
 % end;

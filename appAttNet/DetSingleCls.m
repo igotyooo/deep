@@ -36,6 +36,8 @@ classdef DetSingleCls < handle
             this.settingInitDet.patchMargin         = 0.5;
             this.settingInitDet.numAspect           = 16 / 2;
             this.settingInitDet.confidence          = 0.97;
+            this.settingInitMrg.selectScaleIds      = 1 : this.settingInitDet.numScale;
+            this.settingInitMrg.selectAspectIds     = 1 : this.settingInitDet.numAspect;
             this.settingInitMrg.method              = 'OV'; % 'NMS'
             this.settingInitMrg.overlap             = 0.7;
             this.settingInitMrg.minNumSuppBox       = 1;
@@ -398,6 +400,21 @@ classdef DetSingleCls < handle
                 did2outBr( this.signNoObj, : ) - ...
                 sum( did2outTl( 1 : this.signStop - 1, : ), 1 ) - ...
                 sum( did2outBr( 1 : this.signStop - 1, : ), 1 );
+            % Scale/aspect selection.
+            numScale = this.settingInitDet.numScale;
+            numAspect = this.settingInitDet.numAspect;
+            sids = this.settingInitMrg.selectScaleIds;
+            aids = this.settingInitMrg.selectAspectIds;
+            if numScale ~= numel( sids ),
+                did2ok = ismember( did2det( 5, : ), sids );
+                did2det = did2det( :, did2ok );
+                did2score = did2score( :, did2ok );
+            end;
+            if numAspect ~= numel( aids ),
+                did2ok = ismember( did2det( 6, : ), aids );
+                did2det = did2det( :, did2ok );
+                did2score = did2score( :, did2ok );
+            end;
             % Merge.
             method = this.settingInitMrg.method;
             overlap = this.settingInitMrg.overlap;

@@ -61,7 +61,7 @@ function [ rid2tlbr, rid2oidx, rid2tlbrBgd, rid2oidxBgd ] = ...
     [ rid2tinsect, rid2foid ] = max( foid2rid2insect_, [  ], 1 );
     foid2rid2insect( ( ( 1 : sum( rid2ok ) ) - 1 ) * numFgd + rid2foid ) = 0;
     % Filter by object majority.
-    foid2rid2insectOverTarget = bsxfun( @times, foid2rid2insect, 1./ foid2area );
+    foid2rid2insectOverTarget = bsxfun( @times, foid2rid2insect, 1./ foid2area ); % 
     foid2rid2ok = foid2rid2insectOverTarget > insectOverFgdObjForMajority;
     foid2rid2insect = foid2rid2insect .* foid2rid2ok;
     topInsect = max( foid2rid2insect, [  ], 1 );
