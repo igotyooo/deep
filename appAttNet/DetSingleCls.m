@@ -91,6 +91,25 @@ classdef DetSingleCls < handle
             % Determine patch size and stride for activation map.
             this.determineInOutRelations( gpus );
         end
+        function detSubDb( this, numDiv, divId )
+            iids = this.db.getTeiids;
+            numIm = numel( iids );
+            divSize = ceil( numIm / numDiv );
+            sidx = divSize * ( divId - 1 ) + 1;
+            eidx = min( sidx + divSize - 1, numIm );
+            iids = iids( sidx : eidx );
+            this.makeDir;
+            numIm = numel( iids );
+            cummt = 0;
+            for iidx = 1 : numIm; itime = tic;
+                iid = iids( iidx );
+                this.iid2det0( iid );
+                cummt = cummt + toc( itime );
+                fprintf( '%s: ', upper( mfilename ) );
+                disploop( numIm, iidx, ...
+                    'Init det.', cummt );
+            end;
+        end
         function detDb( this )
             fpath = this.getDetResPath( 0 );
             try
@@ -805,7 +824,7 @@ classdef DetSingleCls < handle
             did2newdid2is = did2newdid2is...
                 ( :, sum( did2newdid2is ) > minNumSuppBox );
             numDet = size( did2newdid2is, 2 );
-            newdid2det = zeros( 4, numDet );
+            newdid2det = zeros( size( did2det, 1 ), numDet );
             newdid2score = zeros( numDet, 1 );
             for newdid = 1 : numDet,
                 boxes = did2det( :, did2newdid2is( :, newdid ) );

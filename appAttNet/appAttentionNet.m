@@ -40,7 +40,7 @@ setting.app.initDet.numMaxTest                      = 50;
 setting.app.initDet.patchMargin                     = 0.5;
 setting.app.initDet.numAspect                       = 16 / 2;
 setting.app.initDet.confidence                      = 0.97;
-setting.app.initMrg.selectScaleIds                  = 1 : setting.app.initDet.numScale; %%%
+setting.app.initMrg.selectScaleIds                  = 1 : setting.app.initDet.numScale;
 setting.app.initMrg.selectAspectIds                 = 1 : setting.app.initDet.numAspect;
 setting.app.initMrg.method                          = 'NMS';
 setting.app.initMrg.overlap                         = 0.8;
@@ -93,28 +93,87 @@ app.refineDet( 1 );
 
 
 
+%% FIX ASPECTS, BUT OPTIMIZE SCALES.
+clc; clearvars -except db io net path setting app res1 res0;
+
+setting.app.initDet.scaleStep                       = 2;
+setting.app.initDet.numScale                        = 6; % 7;
+setting.app.initDet.dvecLength                      = 30;
+setting.app.initDet.numMaxTest                      = 50;
+setting.app.initDet.patchMargin                     = 0.5;
+setting.app.initDet.numAspect                       = 16 / 2;
+setting.app.initDet.confidence                      = 0.97;
+setting.app.initMrg.mergeType                       = 'WAVG';
+setting.app.initMrg.scoreType                       = 'AVG';
+setting.app.refine.dvecLength                       = 30;
+setting.app.refine.boxScaleMag                      = 2.5;
+setting.app.refine.mergeType                        = 'WAVG';
+setting.app.refine.scoreType                        = 'AVG';
+
+setting.app.initMrg.selectScaleIds                  = 1 : 2 : setting.app.initDet.numScale;
+setting.app.initMrg.selectAspectIds                 = 1 : 2 : setting.app.initDet.numAspect;
+setting.app.initMrg.method                          = 'NMS';
+setting.app.initMrg.overlap                         = 0.8;
+setting.app.initMrg.minNumSuppBox                   = 1;
+setting.app.refine.method                           = 'OV';
+setting.app.refine.overlap                          = 0.5;
+setting.app.refine.minNumSuppBox                    = 0;
+
+app = DetSingleCls...
+    ( db, net, ...
+    setting.app.initDet, ...
+    setting.app.initMrg, ...
+    setting.app.refine );
+app.init( setting.gpus );
+app.detDb;
+[   res0.ap, ...
+    res0.rank2iid, ...
+    res0.rank2bbox, ...
+    res0.rank2tp, ...
+    res0.rank2fp ] = ...
+    app.computeAp...
+    ( 'visionresearchreport@gmail.com' );
+app.refineDet( 1 );
+[   res1.ap, ...
+    res1.rank2iid, ...
+    res1.rank2bbox, ...
+    res1.rank2tp, ...
+    res1.rank2fp ] = ...
+    app.computeAp...
+    ( 'visionresearchreport@gmail.com' );
+
+
+
+
+
 
 %% DEV.
-% clc; clearvars -except db io net path setting app;
-% cid = find( cellfun( @( name )strcmp( name, io.settingTsDb.selectClassName ), db.cid2name ) );
-% iids = setdiff( unique( db.oid2iid( db.oid2cid == cid ) ), find( db.iid2setid == 1 ) );
-% iids = iids( 1 : end );
-% % iids = 517; db.getTeiids;
-% for iid = iids',
-%     im = imread( db.iid2impath{ iid } );
-%     did2tlbr = app.iid2det0( iid );
-%     figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } );
-%     did2tlbr = app.iid2det( iid );
-%     figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
-%     did2str = {  };
-%     if ~isempty( did2tlbr )
-%         [ did2tlbr, did2rescore ]= app.im2redet( im, did2tlbr );
-%         did2str = cellfun( @num2str, num2cell( did2rescore ), 'uniformOutput', false );
-%     end
-%     figure( 3 ); plottlbr( did2tlbr, im, false, 'c', did2str );
-%     title( num2str( iid ) );
-%     if numel( iids ) ~= 1, waitforbuttonpress; end;
-% end;
+clc; clearvars -except db io net path setting app res1 res0;
+cid = find( cellfun( @( name )strcmp( name, io.settingTsDb.selectClassName ), db.cid2name ) );
+iids = setdiff( unique( db.oid2iid( db.oid2cid == cid ) ), find( db.iid2setid == 1 ) );
+% iids = 2708; % db.getTeiids;
+for iid = iids',
+    im = imread( db.iid2impath{ iid } );
+    did2tlbr = app.iid2det0( iid );
+    % Scale/aspect selection.
+    sids = app.settingInitMrg.selectScaleIds;
+    aids = app.settingInitMrg.selectAspectIds;
+    did2ok = ismember( did2tlbr( 5, : ), sids );
+    did2tlbr = did2tlbr( :, did2ok );
+    did2ok = ismember( did2tlbr( 6, : ), aids );
+    did2tlbr = did2tlbr( :, did2ok );
+    figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } );
+    did2tlbr = app.iid2det( iid );
+    figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
+    did2str = {  };
+    if ~isempty( did2tlbr )
+        [ did2tlbr, did2rescore ]= app.im2redet( im, did2tlbr );
+        did2str = cellfun( @num2str, num2cell( did2rescore ), 'uniformOutput', false );
+    end
+    figure( 3 ); plottlbr( did2tlbr, im, false, 'c', did2str );
+    title( num2str( iid ) );
+    if numel( iids ) ~= 1, waitforbuttonpress; end;
+end;
 
 
 %% PR.

@@ -5,7 +5,7 @@ setting.db = path.db.voc2007;
 db = Db( setting.db, path.dstDir );
 db.genDb;
 db = db.mergeCls( { ( 1 : db.getNumClass )' }, strcat( setting.db.name, 'OBJ' ) );
-setting.gpus                                        = 2;
+setting.gpus                                        = 1;
 setting.io.tsDb.selectClassName                     = db.cid2name{ : };
 setting.io.tsDb.stride                              = 32;
 setting.io.tsDb.dstSide                             = 227;
@@ -36,15 +36,16 @@ setting.net.weightDecay                             = 0.0005;
 setting.net.momentum                                = 0.9;
 setting.net.modelType                               = 'dropout';
 setting.net.learningRate                            = [ 0.01 * ones( 1, 8 ), 0.001 * ones( 1, 2 ) ];
+
 setting.app.initDet.scaleStep                       = 2;
-setting.app.initDet.numScale                        = 7;
+setting.app.initDet.numScale                        = 7; % 6;
 setting.app.initDet.dvecLength                      = 30;
 setting.app.initDet.numMaxTest                      = 50;
-setting.app.initDet.docScaleMag                     = 4;
-setting.app.initDet.startHorzScale                  = 1;
-setting.app.initDet.horzScaleStep                   = 0.5;
-setting.app.initDet.endHorzScale                    = 2;
-setting.app.initDet.preBoundInitGuess               = false;
+setting.app.initDet.patchMargin                     = 0.5;
+setting.app.initDet.numAspect                       = 16 / 2;
+setting.app.initDet.confidence                      = 0.97;
+setting.app.initMrg.selectScaleIds                  = 1 : setting.app.initDet.numScale;
+setting.app.initMrg.selectAspectIds                 = 1 : setting.app.initDet.numAspect;
 setting.app.initMrg.method                          = 'NMS';
 setting.app.initMrg.overlap                         = 0.8;
 setting.app.initMrg.minNumSuppBox                   = 1;
@@ -57,6 +58,7 @@ setting.app.refine.overlap                          = 0.5;
 setting.app.refine.minNumSuppBox                    = 0;
 setting.app.refine.mergeType                        = 'WAVG';
 setting.app.refine.scoreType                        = 'AVG';
+
 reset( gpuDevice( setting.gpus ) ); 
 io = InOutDetSingleCls( db, ...
     setting.io.tsDb, ...
@@ -67,12 +69,15 @@ net = Net( io, setting.net );
 net.init;
 net.train( setting.gpus, 'visionresearchreport@gmail.com' );
 net.fetchBestNet;
-% app = DetSingleCls...
-%     ( db, net, ...
-%     setting.app.initDet, ...
-%     setting.app.initMrg, ...
-%     setting.app.refine );
-% app.init( setting.gpus );
+app = DetSingleCls...
+    ( db, net, ...
+    setting.app.initDet, ...
+    setting.app.initMrg, ...
+    setting.app.refine );
+app.init( setting.gpus );
+app.detSubDb( 10, 2 );
+
+
 % app.detDb;
 % [   res0.ap, ...
 %     res0.rank2iid, ...
@@ -96,17 +101,47 @@ net.fetchBestNet;
 
 %% DEV.
 % clc; clearvars -except db io net path setting app;
-% iids = 377; db.getTeiids;
+% setting.app.initMrg.selectScaleIds                  = 1 : 6; % setting.app.initDet.numScale;
+% setting.app.initMrg.selectAspectIds                 = 1 : setting.app.initDet.numAspect;
+% setting.app.initMrg.method                          = 'NMS';
+% setting.app.initMrg.overlap                         = 0.8;
+% setting.app.initMrg.minNumSuppBox                   = 1;
+% setting.app.initMrg.mergeType                       = 'WAVG';
+% setting.app.initMrg.scoreType                       = 'AVG';
+% setting.app.refine.dvecLength                       = 30;
+% setting.app.refine.boxScaleMag                      = 2.5;
+% setting.app.refine.method                           = 'OV';
+% setting.app.refine.overlap                          = 0.5;
+% setting.app.refine.minNumSuppBox                    = 0;
+% setting.app.refine.mergeType                        = 'WAVG';
+% setting.app.refine.scoreType                        = 'AVG';
+% 
+% app = DetSingleCls...
+%     ( db, net, ...
+%     setting.app.initDet, ...
+%     setting.app.initMrg, ...
+%     setting.app.refine );
+% app.init( setting.gpus );
+% 
+% iids = db.getTeiids;
 % for iid = iids',
 %     im = imread( db.iid2impath{ iid } );
 %     did2tlbr = app.iid2det0( iid );
-%     figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } );
+%     figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } ); drawnow;
 %     did2tlbr = app.iid2det( iid );
-%     figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
+%     figure( 2 ); plottlbr( did2tlbr, im, false, 'c' ); drawnow;
+%     
 %     if ~isempty( did2tlbr )
 %         did2tlbr = app.im2redet( im, did2tlbr );
-%     end
-%     figure( 3 ); plottlbr( did2tlbr, im, false, 'c' );
+%     end;
+%     figure( 3 ); plottlbr( did2tlbr, im, false, 'c' ); drawnow;
+%     
+%     hold on;
+%     gt = tlbr2rect( db.oid2bbox( :, db.oid2iid == iid ) );
+%     for g = 1 : size( gt, 2 ),
+%         rectangle( 'Position', gt( :, g )', 'lineWidth', 2, 'EdgeColor', 'r' ); hold on;
+%     end; hold off;
+%     title( sprintf( 'IID%d, GT%d, DET%d', iid, size( gt, 2 ), size( did2tlbr, 2 ) ) );
 %     if numel( iids ) ~= 1, waitforbuttonpress; end;
 % end;
 

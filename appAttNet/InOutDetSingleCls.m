@@ -409,7 +409,7 @@ classdef InOutDetSingleCls < handle
                 fprintf( '%s: Save sub-db.\n', ...
                     upper( mfilename ) );
                 this.makeTsDbDir;
-                save( fpath, 'db' );
+                save( fpath, 'db', '-v7.3' );
                 fprintf( '%s: Done.\n', ...
                     upper( mfilename ) );
             end
