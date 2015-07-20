@@ -5,18 +5,18 @@ setting.db = path.db.voc2007;
 db = Db( setting.db, path.dstDir );
 db.genDb;
 db = db.mergeCls( { ( 1 : db.getNumClass )' }, strcat( setting.db.name, 'OBJ' ) );
-setting.gpus                                        = 1;
+setting.gpus                                        = 2;
 setting.io.tsDb.selectClassName                     = db.cid2name{ : };
 setting.io.tsDb.stride                              = 32;
 setting.io.tsDb.dstSide                             = 227;
 setting.io.tsDb.numScale                            = 10;
 setting.io.tsDb.scaleStep                           = 2;
-setting.io.tsDb.numAspect                           = 32; % 16;
-setting.io.tsDb.docScaleMag                         = 4;
+setting.io.tsDb.numAspect                           = 32;
+setting.io.tsDb.docScaleMag                         = 1; %
 setting.io.tsDb.confidence                          = 0.97;
 setting.io.tsDb.insectOverFgdObj                    = 0.5;
 setting.io.tsDb.insectOverFgdObjForMajority         = 0.1;
-setting.io.tsDb.fgdObjMajority                      = 1.3; % 1.5;
+setting.io.tsDb.fgdObjMajority                      = 1.3; %
 setting.io.tsDb.insectOverBgdObj                    = 0.2;
 setting.io.tsDb.insectOverBgdRegn                   = 0.5;
 setting.io.tsDb.insectOverBgdRegnForReject          = 0.9;
@@ -35,10 +35,9 @@ setting.net.normalizeImage                          = 'NONE';
 setting.net.weightDecay                             = 0.0005;
 setting.net.momentum                                = 0.9;
 setting.net.modelType                               = 'dropout';
-setting.net.learningRate                            = [ 0.01 * ones( 1, 8 ), 0.001 * ones( 1, 2 ) ];
-
+setting.net.learningRate                            = [ 0.01 * ones( 1, 5 ), 0.001 * ones( 1, 2 ) ]; %
 setting.app.initDet.scaleStep                       = 2;
-setting.app.initDet.numScale                        = 7; % 6;
+setting.app.initDet.numScale                        = 7;
 setting.app.initDet.dvecLength                      = 30;
 setting.app.initDet.numMaxTest                      = 50;
 setting.app.initDet.patchMargin                     = 0.5;
@@ -75,95 +74,21 @@ app = DetSingleCls...
     setting.app.initMrg, ...
     setting.app.refine );
 app.init( setting.gpus );
-app.detSubDb( 10, 2 );
+app.detDb;
+[   res0.ap, ...
+    res0.rank2iid, ...
+    res0.rank2bbox, ...
+    res0.rank2tp, ...
+    res0.rank2fp ] = ...
+    app.computeAp...
+    ( 'visionresearchreport@gmail.com' );
+app.refineDet( 1 );
+[   res1.ap, ...
+    res1.rank2iid, ...
+    res1.rank2bbox, ...
+    res1.rank2tp, ...
+    res1.rank2fp ] = ...
+    app.computeAp...
+    ( 'visionresearchreport@gmail.com' );
 
 
-% app.detDb;
-% [   res0.ap, ...
-%     res0.rank2iid, ...
-%     res0.rank2bbox, ...
-%     res0.rank2tp, ...
-%     res0.rank2fp ] = ...
-%     app.computeAp...
-%     ( 'visionresearchreport@gmail.com' );
-% app.refineDet( 1 );
-% [   res1.ap, ...
-%     res1.rank2iid, ...
-%     res1.rank2bbox, ...
-%     res1.rank2tp, ...
-%     res1.rank2fp ] = ...
-%     app.computeAp...
-%     ( 'visionresearchreport@gmail.com' );
-
-
-
-
-
-%% DEV.
-% clc; clearvars -except db io net path setting app;
-% setting.app.initMrg.selectScaleIds                  = 1 : 6; % setting.app.initDet.numScale;
-% setting.app.initMrg.selectAspectIds                 = 1 : setting.app.initDet.numAspect;
-% setting.app.initMrg.method                          = 'NMS';
-% setting.app.initMrg.overlap                         = 0.8;
-% setting.app.initMrg.minNumSuppBox                   = 1;
-% setting.app.initMrg.mergeType                       = 'WAVG';
-% setting.app.initMrg.scoreType                       = 'AVG';
-% setting.app.refine.dvecLength                       = 30;
-% setting.app.refine.boxScaleMag                      = 2.5;
-% setting.app.refine.method                           = 'OV';
-% setting.app.refine.overlap                          = 0.5;
-% setting.app.refine.minNumSuppBox                    = 0;
-% setting.app.refine.mergeType                        = 'WAVG';
-% setting.app.refine.scoreType                        = 'AVG';
-% 
-% app = DetSingleCls...
-%     ( db, net, ...
-%     setting.app.initDet, ...
-%     setting.app.initMrg, ...
-%     setting.app.refine );
-% app.init( setting.gpus );
-% 
-% iids = db.getTeiids;
-% for iid = iids',
-%     im = imread( db.iid2impath{ iid } );
-%     did2tlbr = app.iid2det0( iid );
-%     figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } ); drawnow;
-%     did2tlbr = app.iid2det( iid );
-%     figure( 2 ); plottlbr( did2tlbr, im, false, 'c' ); drawnow;
-%     
-%     if ~isempty( did2tlbr )
-%         did2tlbr = app.im2redet( im, did2tlbr );
-%     end;
-%     figure( 3 ); plottlbr( did2tlbr, im, false, 'c' ); drawnow;
-%     
-%     hold on;
-%     gt = tlbr2rect( db.oid2bbox( :, db.oid2iid == iid ) );
-%     for g = 1 : size( gt, 2 ),
-%         rectangle( 'Position', gt( :, g )', 'lineWidth', 2, 'EdgeColor', 'r' ); hold on;
-%     end; hold off;
-%     title( sprintf( 'IID%d, GT%d, DET%d', iid, size( gt, 2 ), size( did2tlbr, 2 ) ) );
-%     if numel( iids ) ~= 1, waitforbuttonpress; end;
-% end;
-
-
-%% PR.
-% res = res1;
-% fp = cumsum( res.rank2fp );
-% tp = cumsum( res.rank2tp );
-% npos = sum( db.oid2cid( unique( cat( 1, db.iid2oids{ db.iid2setid == 2 } ) ) ) == 15 & ( ~db.oid2diff( unique( cat( 1, db.iid2oids{ db.iid2setid == 2 } ) ) ) ) );
-% rec = tp / npos;
-% prec = tp ./ ( fp + tp );
-% ap = 0;
-% for t = 0 : 0.1 : 1
-%     p = max( prec( rec >= t ) );
-%     if isempty( p ), p = 0; end;
-%     ap = ap + p / 11;
-% end
-% fprintf( 'AP: %.2f\n', ap * 100 );
-% plot( rec, prec, '-r' );
-% grid;
-% xlim( [ 0, 1 ] );
-% ylim( [ 0, 1 ] );
-% xlabel( 'Recall' );
-% ylabel( 'Precision' );
-% hold on;
