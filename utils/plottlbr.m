@@ -1,14 +1,23 @@
-function plottlbr( tlbrs, im, wait, color, cnames )
+function plottlbr( bid2tlbr, im, wait, color, cnames )
     if nargin < 4, color = 'c'; end;
+    if ischar( im ), im = imread( im ); end;
+    bid2tlbr = bid2tlbr( 1 : 4, : );
+    [ nr, nc, nch ] = size( im );
+    marginTl = 1 - min( 1, min( bid2tlbr( 1 : 2, : ), [  ], 2 ) );
+    marginBr = max( [ max( bid2tlbr( 3 : 4, : ), [  ], 2 ), [ nr; nc; ] ], [  ], 2 ) - [ nr; nc; ];
+    bid2tlbr = bsxfun( @plus, bid2tlbr, [ marginTl; marginTl; ] );
+    im_ = zeros( nr + marginTl( 1 ) + marginBr( 1 ), nc + marginTl( 2 ) + marginBr( 2 ), nch, 'uint8' );
+    im_( marginTl( 1 ) + 1 : marginTl( 1 ) + nr, marginTl( 2 ) + 1 : marginTl( 2 ) + nc, : ) = im;
+    im = im_;
     
     lineWidth = 2;
-    numBox = size( tlbrs, 2 );
+    numBox = size( bid2tlbr, 2 );
     imshow( im ); 
     if ~numBox, return; end;
-    rects = tlbr2rect( tlbrs );
+    rects = tlbr2rect( bid2tlbr );
     hold on; cnt = 0;
     for i = 1 : numBox; cnt = cnt + 1;
-        tlbr = tlbrs( :, i );
+        tlbr = bid2tlbr( :, i );
         rect = rects( :, i );
         if iscell( color ) && numel( color ) == 4,
             line( ...

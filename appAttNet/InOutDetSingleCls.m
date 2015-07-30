@@ -3,8 +3,8 @@
 % Task-specific implementation required.
 classdef InOutDetSingleCls < handle
     properties
-        srcDb;                  % A general db.
-        tsDb;                   % A task specific db to be made. If it is unnecessary, just fetch srcDb.
+        db;                     % A general db.
+        tsDb;                   % A task specific db to be made. If it is unnecessary, just fetch db.
         rgbMean;                % A task specific RGB mean to normalize images.
         numBchTr;               % Number of training batches in an epoch.
         numBchVal;              % Number of validation batches in an epoch.
@@ -25,8 +25,8 @@ classdef InOutDetSingleCls < handle
     % Public interface. Net will be trained with the following functions only. %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods( Access = public )
-        function this = InOutDetSingleCls( srcDb, settingTsDb, settingTsNet, settingGeneral )
-            this.srcDb = srcDb;
+        function this = InOutDetSingleCls( db, settingTsDb, settingTsNet, settingGeneral )
+            this.db = db;
             this.tsMetricName = 'Top-1 err';
             % Task specific) Default parameters for task specific db.
             this.settingTsDb.selectClassName                    = 'person';
@@ -240,7 +240,7 @@ classdef InOutDetSingleCls < handle
                 this.rgbMean = data.rgbMean;
             catch
                 dstCh = this.settingGeneral.dstCh;
-                idx2iid = this.srcDb.getTriids;
+                idx2iid = this.db.getTriids;
                 numIm = numel( idx2iid );
                 batchSize = 256;
                 idx2rgb = zeros( 1, 1, dstCh, numIm, 'single' );
@@ -250,7 +250,7 @@ classdef InOutDetSingleCls < handle
                     bcnt = bcnt + 1;
                     btime = tic;
                     biids = idx2iid( i : min( i + batchSize - 1, numIm ) );
-                    bimpaths = this.srcDb.iid2impath( biids );
+                    bimpaths = this.db.iid2impath( biids );
                     ims = vl_imreadjpeg( bimpaths, 'numThreads', 12 );
                     for j = 1 : numel( ims ),
                         im = ims{ j };
@@ -435,18 +435,18 @@ classdef InOutDetSingleCls < handle
             minObjScale = this.settingTsDb.minObjScale;
             numErode = this.settingTsDb.numErode;
             % Do the job.
-            targetClsId = cellfun( @( cname )strcmp( cname, targetClsName ), this.srcDb.cid2name );
+            targetClsId = cellfun( @( cname )strcmp( cname, targetClsName ), this.db.cid2name );
             targetClsId = find( targetClsId );
-            oid2bbox = this.srcDb.oid2bbox( :, this.srcDb.oid2cid == targetClsId );
+            oid2bbox = this.db.oid2bbox( :, this.db.oid2cid == targetClsId );
             aspects = determineAspectRates( oid2bbox, numAspect - 1, confidence );
             aspects = unique( cat( 1, 1, aspects ) );
             scales = scaleStep .^ ( 0 : 0.5 : 0.5 * ( numScale - 1 ) );
-            idx2iid = find( this.srcDb.iid2setid == setid );
+            idx2iid = find( this.db.iid2setid == setid );
             numIm = numel( idx2iid );
             [ didsTl, didsBr ] = meshgrid( 1 : this.signStop, 1 : this.signStop );
             dpid2dids = single( [ didsTl( : ), didsBr( : ) ]' );
             numDirPair = size( dpid2dids, 2 );
-            iid2impath = this.srcDb.iid2impath( idx2iid );
+            iid2impath = this.db.iid2impath( idx2iid );
             fgdObj.oid2iid = cell( numIm, 1 );
             fgdObj.oid2dpid2regnsSqr = cell( numIm, 1 );
             fgdObj.oid2dpid2regnsNsqr = cell( numIm, 1 );
@@ -459,12 +459,12 @@ classdef InOutDetSingleCls < handle
             for newiid = 1 : numIm;
                 itime = tic;
                 iid = idx2iid( newiid );
-                imSize = this.srcDb.iid2size( :, iid );
-                oidx2oid = find( this.srcDb.oid2iid == iid );
-                oidx2cid = this.srcDb.oid2cid( oidx2oid );
+                imSize = this.db.iid2size( :, iid );
+                oidx2oid = find( this.db.oid2iid == iid );
+                oidx2cid = this.db.oid2cid( oidx2oid );
                 oidx2fgdObj = oidx2cid == targetClsId;
                 oidx2bgdObj = ~oidx2fgdObj;
-                oidx2tlbr = round( this.srcDb.oid2bbox( :, oidx2oid ) );
+                oidx2tlbr = round( this.db.oid2bbox( :, oidx2oid ) );
                 oidx2tlbr = single( oidx2tlbr );
                 [ rid2tlbrFgdObj, rid2oidxFgdObj, rid2tlbrBgd, rid2oidxBgd ] = ...
                     extTargetObjRegns( ...
@@ -682,12 +682,12 @@ classdef InOutDetSingleCls < handle
         function name = getRgbMeanName( this )
             name = sprintf( ...
                 'RGBM_OF_%s', ...
-                this.srcDb.getName );
+                this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getRgbMeanDir( this )
-            dir = this.srcDb.getDir;
+            dir = this.db.getDir;
         end
         function dir = makeRgbMeanDir( this )
             dir = this.getRgbMeanDir;
@@ -702,12 +702,12 @@ classdef InOutDetSingleCls < handle
             name = sprintf( ...
                 'DBTS_%s_OF_%s', ...
                 this.settingTsDb.changes, ...
-                this.srcDb.getName );
+                this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getTsDbDir( this )
-            dir = this.srcDb.getDir;
+            dir = this.db.getDir;
         end
         function dir = makeTsDbDir( this )
             dir = this.getTsDbDir;

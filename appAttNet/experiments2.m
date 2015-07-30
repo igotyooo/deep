@@ -22,7 +22,7 @@ setting.io.tsDb.numMaxBgdRegnPerScale               = 100;
 setting.io.tsDb.stopSignError                       = 5;
 setting.io.tsDb.minObjScale                         = 1 / sqrt( 2 );
 setting.io.tsDb.numErode                            = 5;
-setting.io.tsNet.pretrainedNetName                  = path.net.vgg_m_2048.name; % <- BUG! DOES NOT CHANGED!
+setting.io.tsNet.pretrainedNetName                  = path.net.vgg_m_2048.name;
 setting.io.tsNet.suppressPretrainedLayerLearnRate   = 1 / 10;
 setting.io.tsNet.outFilterDepth                     = 2048;
 setting.io.general.dstSide                          = 227;
@@ -54,7 +54,6 @@ setting.app.refine.overlap                          = 0.5;
 setting.app.refine.minNumSuppBox                    = 0;
 setting.app.refine.mergeType                        = 'WAVG';
 setting.app.refine.scoreType                        = 'AVG';
-
 reset( gpuDevice( setting.gpus ) ); 
 db = Db( setting.db, path.dstDir );
 db.genDb;
@@ -67,73 +66,88 @@ net = Net( io, setting.net );
 net.init;
 net.train( setting.gpus, 'visionresearchreport@gmail.com' );
 net.fetchBestNet;
-app = DetSingleCls...
-    ( db, net, ...
-    setting.app.initDet, ...
-    setting.app.initMrg, ...
-    setting.app.refine );
-app.init( setting.gpus );
-app.detDb;
-[   res0.ap, ...
-    res0.rank2iid, ...
-    res0.rank2bbox, ...
-    res0.rank2tp, ...
-    res0.rank2fp ] = ...
-    app.computeAp...
-    ( 'visionresearchreport@gmail.com' );
-app.refineDet( 1 );
-[   res1.ap, ...
-    res1.rank2iid, ...
-    res1.rank2bbox, ...
-    res1.rank2tp, ...
-    res1.rank2fp ] = ...
-    app.computeAp...
-    ( 'visionresearchreport@gmail.com' );
 
-
-
-%% DEV.
-clc; clearvars -except db io net path setting app res1 res0;
-cid = find( cellfun( @( name )strcmp( name, io.settingTsDb.selectClassName ), db.cid2name ) );
-iids = setdiff( unique( db.oid2iid( db.oid2cid == cid ) ), find( db.iid2setid == 1 ) );
-% iids = 3446; % db.getTeiids;
-for iid = iids',
-    im = imread( db.iid2impath{ iid } );
-    did2tlbr = app.iid2det0( iid );
-    figure( 1 ); plottlbr( did2tlbr, im, false, { 'r', 'y', 'b', 'g' } );
-    did2tlbr = app.iid2det( iid );
-    figure( 2 ); plottlbr( did2tlbr, im, false, 'c' );
-    did2str = {  };
-    if ~isempty( did2tlbr )
-        [ did2tlbr, did2rescore ]= app.im2redet( im, did2tlbr );
-        did2str = cellfun( @num2str, num2cell( did2rescore ), 'uniformOutput', false );
-    end
-    figure( 3 ); plottlbr( did2tlbr, im, false, 'c', did2str );
-    title( num2str( iid ) );
-    if numel( iids ) ~= 1, waitforbuttonpress; end;
+%% SELECTING TWO STAGE OVERLAP VALUE.
+overlap1 = 0.3 : 0.1 : 1;
+overlap2 = 0.3 : 0.1 : 1;
+for o1 = overlap1,
+    for o2 = overlap2,
+        settingNew = setting;
+	settingNew.app.initMrg.selectScaleIds = [ 1, 3, 5 ];
+	settingNew.app.initMrg.selectAspectIds = 1 : 8;
+        settingNew.app.initMrg.overlap = o1;
+        settingNew.app.refine.overlap = o2;
+        app = DetSingleCls...
+            ( db, net, ...
+            settingNew.app.initDet, ...
+            settingNew.app.initMrg, ...
+            settingNew.app.refine );
+        app.init( settingNew.gpus );
+        app.detDb;
+        [   res0.ap, ...
+            res0.rank2iid, ...
+            res0.rank2bbox, ...
+            res0.rank2tp, ...
+            res0.rank2fp ] = ...
+            app.computeAp...
+            ( 'visionresearchreport@gmail.com' );
+        app.refineDet( 1 );
+        [   res1.ap, ...
+            res1.rank2iid, ...
+            res1.rank2bbox, ...
+            res1.rank2tp, ...
+            res1.rank2fp ] = ...
+            app.computeAp...
+            ( 'visionresearchreport@gmail.com' );
+        clear app;
+    end;
 end;
 
 
-%% PR.
-res = res1;
-fp = cumsum( res.rank2fp );
-tp = cumsum( res.rank2tp );
-cid = find( cellfun( @( name )strcmp( name, io.settingTsDb.selectClassName ), db.cid2name ) );
-npos = sum( db.oid2cid( unique( cat( 1, db.iid2oids{ db.iid2setid == 2 } ) ) ) == cid & ...
-    ( ~db.oid2diff( unique( cat( 1, db.iid2oids{ db.iid2setid == 2 } ) ) ) ) );
-rec = tp / npos;
-prec = tp ./ ( fp + tp );
-ap = 0;
-for t = 0 : 0.1 : 1
-    p = max( prec( rec >= t ) );
-    if isempty( p ), p = 0; end;
-    ap = ap + p / 11;
-end
-fprintf( 'AP: %.2f\n', ap * 100 );
-plot( rec, prec, '-r' );
-grid;
-xlim( [ 0, 1 ] );
-ylim( [ 0, 1 ] );
-xlabel( 'Recall' );
-ylabel( 'Precision' );
-hold on;
+%% SELECTING SCALE AND ASPECT.
+% selectScaleIds{ 1 } = 1 : 1 : 7;
+% selectScaleIds{ 2 } = 1 : 1 : 6;
+% selectScaleIds{ 3 } = 1 : 1 : 5;
+% selectScaleIds{ 4 } = 1 : 1 : 4;
+% selectScaleIds{ 5 } = 1 : 2 : 7;
+% selectScaleIds{ 6 } = 1 : 2 : 5;
+% selectAspectIds{ 1 } = 1 : 1 : 8;
+% selectAspectIds{ 2 } = 1 : 2 : 8;
+% selectAspectIds{ 3 } = 1 : 3 : 8;
+% selectAspectIds{ 4 } = 2 : 1 : 7;
+% selectAspectIds{ 5 } = 2 : 2 : 7;
+% selectAspectIds{ 6 } = 2 : 3 : 7;
+% for s = selectScaleIds,
+%     for a = selectAspectIds,
+%         settingNew = setting;
+%         settingNew.app.initMrg.selectScaleIds = s{ : };
+%         settingNew.app.initMrg.selectAspectIds = a{ : };
+%         app = DetSingleCls...
+%             ( db, net, ...
+%             settingNew.app.initDet, ...
+%             settingNew.app.initMrg, ...
+%             settingNew.app.refine );
+%         app.init( settingNew.gpus );
+%         app.detDb;
+%         [   res0.ap, ...
+%             res0.rank2iid, ...
+%             res0.rank2bbox, ...
+%             res0.rank2tp, ...
+%             res0.rank2fp ] = ...
+%             app.computeAp...
+%             ( 'visionresearchreport@gmail.com' );
+%         app.refineDet( 1 );
+%         [   res1.ap, ...
+%             res1.rank2iid, ...
+%             res1.rank2bbox, ...
+%             res1.rank2tp, ...
+%             res1.rank2fp ] = ...
+%             app.computeAp...
+%             ( 'visionresearchreport@gmail.com' );
+%         clear app;
+%     end;
+% end;
+
+
+
+

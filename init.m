@@ -7,7 +7,7 @@ path.lib.vlfeat                         = '/iron/lib/vlfeat/vlfeat-0.9.19/';
 path.lib.jsgd                           = '/iron/lib/jsgd-61/';
 path.lib.selectiveSearch                = '/iron/lib/selectiveSearch/SelectiveSearchCodeIJCV/';
 % Set dst dir.
-path.dstDir                             = '/nickel/data_iccv15/';
+path.dstDir                             = '/nickel/data_attnet_clsagn/';
 % Set image DB path only.
 path.db.voc2007.name                    = 'VOC2007';
 path.db.voc2007.funh                    = @DB_VOC2007;

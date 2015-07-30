@@ -418,7 +418,7 @@ classdef Net < handle
             mssg{ end + 1 } = '_______________';
             mssg{ end + 1 } = 'TRAINING REPORT';
             mssg{ end + 1 } = sprintf( 'DATABASE: %s', ...
-                this.srcInOut.srcDb.name );
+                this.srcInOut.db.name );
             mssg{ end + 1 } = sprintf( 'INOUT: %s', ...
                 this.srcInOut.getName );
             mssg{ end + 1 } = sprintf( 'NET: %s', ...
@@ -455,7 +455,7 @@ classdef Net < handle
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getNetDir( this )
-            dbDir = this.srcInOut.srcDb.dstDir;
+            dbDir = this.srcInOut.db.dstDir;
             dir = fullfile( dbDir, this.getNetDirName );
         end
         function dir = makeNetDir( this )
@@ -531,7 +531,7 @@ classdef Net < handle
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getImStatsDir( this )
-            dir = this.srcInOut.srcDb.dstDir;
+            dir = this.srcInOut.db.dstDir;
         end
         function dir = makeImStatsDir( this )
             dir = this.getImStatsDir;
