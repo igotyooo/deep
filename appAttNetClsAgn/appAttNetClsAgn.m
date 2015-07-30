@@ -37,10 +37,10 @@ io = InOutPropRegn( db, ...
     setting.io.tsNet, ...
     setting.io.general );
 io.init;
-% net = Net( io, setting.net );
-% net.init;
-% net.train( setting.gpus, 'visionresearchreport@gmail.com' );
-% net.fetchBestNet;
+net = Net( io, setting.net );
+net.init;
+net.train( setting.gpus, 'visionresearchreport@gmail.com' );
+net.fetchBestNet;
 
 
 
@@ -49,14 +49,36 @@ io.init;
 
 
 
-%% 
-clc;
-[ ims, gts ] = io.provdBchVal;
-for s = 1 : setting.io.general.batchSize,
-    im = ims( :, :, :, s );
-    gt = gts( s );
-    im = uint8( bsxfun( @plus, im, io.rgbMean ) );
-    try cname = db.cid2name{ gt }; catch, cname = 'background'; end;
-    imshow( im ); title( sprintf( '%s (%d/%d)', cname, s, setting.io.general.batchSize ) );
-    waitforbuttonpress;
-end;
+% clc;
+% [ ims, gts ] = io.provdBchTr;
+% for s = 1 : setting.io.general.batchSize,
+%     im = ims( :, :, :, s );
+%     gt = gts( s );
+%     im = uint8( bsxfun( @plus, im, io.rgbMean ) );
+%     try cname = db.cid2name{ gt }; catch, cname = 'background'; end;
+%     imshow( im ); title( sprintf( '%s (%d/%d)', cname, s, setting.io.general.batchSize ) );
+%     waitforbuttonpress;
+% end;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

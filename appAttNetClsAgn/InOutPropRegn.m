@@ -442,7 +442,7 @@ classdef InOutPropRegn < handle
                         ptlbrs( 4, ptlbrs( 4, : ) < oid2mgtlbr( 4, oid ) ) = oid2mgtlbr( 4, oid );
                         oid2pregns{ oid } = ptlbrs;
                     else
-                        oid2pregns{ oid } = [ oid2tlbr( :, oid ); 0; 0; ];
+                        oid2pregns{ oid } = [ oid2mgtlbr( :, oid ); 0; 0; ];
                     end;
                 end;
                 % Semi-negative mining.

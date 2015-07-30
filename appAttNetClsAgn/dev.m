@@ -25,7 +25,7 @@ db.genDb;
 clc; clearvars -except db path setting; close all; 
 
 rng( 'shuffle' );
-iid = 446; randsample( db.getNumIm, 1 ); 4203; 1297; 3595; 
+iid = 9374; 446; randsample( db.getNumIm, 1 ); 4203; 1297; 3595; 
 im = imread( db.iid2impath{ iid } );
 imSize = size( im )'; imSize = imSize( 1 : 2 );
 oid2tlbr = db.oid2bbox( :, db.oid2iid == iid );
@@ -143,7 +143,7 @@ end;
 % figure( 4 ); plottlbr( nrid2tlbr, im, true, 'c' );
 
 figure( 1 ); plottlbr( oid2tlbr, im, false, 'c', cellfun( @num2str, num2cell( 1 : numObj ), 'UniformOutput', false ) );
-figure( 2 ); plottlbr( oid2pregns{ 2 }, im, false, 'c' );
+figure( 2 ); plottlbr( oid2pregns{ 1 }, im, false, 'c' );
 % figure( 3 ); plottlbr( oid2snregns{ 2 }, im, true, 'c' );
 % figure( 4 ); plottlbr( sid2nregns{ 3 }, im, true, 'c' );
 
