@@ -10,7 +10,6 @@ classdef ImDscrber < handle
             this.srcDb = srcDb;
             this.srcDscrber = srcDscrber;
             this.setting.weights = ones( size( srcDscrber ) );
-            this.setting.aug = false;
             this.setting.keepAspect = true;
             this.setting = setChanges...
                 ( this.setting, setting, upper( mfilename ) );
@@ -29,7 +28,7 @@ classdef ImDscrber < handle
                     @( path )exist( path, 'file' ), ...
                     iid2vpath );
                 this.makeDir( did );
-            end
+            end;
             did2iid2exist = cat( 2, did2iid2exist{ : } );
             iid2exist = prod( did2iid2exist, 2 );
             iids = find( ~iid2exist );
@@ -40,17 +39,15 @@ classdef ImDscrber < handle
             cnt = 0; cummt = 0; numIm = numel( iids );
             for iid = iids'; itime = tic;
                 this.iid2desc( iid, 'NONE', 'NONE' );
-                cummt = cummt + toc( itime ); 
+                cummt = cummt + toc( itime );
                 cnt = cnt + 1;
                 fprintf( '%s: ', upper( mfilename ) );
                 disploop( numIm, cnt, ...
                     'Desc im.', cummt );
-            end
+            end;
         end
         function desc = iid2desc...
                 ( this, iid, kernel, norm )
-            aug = this.setting.aug;
-            keepAspect = this.setting.keepAspect;
             weights = this.setting.weights;
             numDscrber = numel( this.srcDscrber );
             did2desc = cell( numDscrber, 1 );
@@ -60,66 +57,22 @@ classdef ImDscrber < handle
                     data = load( fpath );
                     desc = data.desc;
                 catch
-                    im = imread( this.srcDb.iid2impath{ iid } );
-                    % Augment image.
-                    if aug
-                        [ h, w, ~ ] = size( im );
-                        rate = 224 / 256;
-                        if keepAspect
-                            dsth = round( h * rate );
-                            dstw = round( w * rate );
-                        else
-                            dsth = round( min( h, w ) * rate );
-                            dstw = dsth;
-                        end
-                        ims = this.augIms( im, dsth, dstw );
-                    else
-                        ims = { im };
-                    end
-                    numaug = numel( ims );
-                    desc = cell( numaug, 1 );
-                    for aid = 1 : numaug;
-                        im = ims{ aid };
-                        desc{ aid } = this.srcDscrber{ did }.im2desc( im );
-                    end
-                    desc = cat( 2, desc{ : } );
+                    desc = this.srcDscrber{ did }.iid2desc( iid );
                     save( fpath, 'desc' );
-                end
+                end;
                 desc = kernelMap( desc, kernel );
                 desc = nmlzVecs( desc, norm );
                 did2desc{ did } = desc * weights( did );
             end
             if nargout, desc = cat( 1, did2desc{ : } ); end;
         end
-        function desc = ...
-                im2desc( this, im, kernel, norm )
-            aug = this.setting.aug;
-            keepAspect = this.setting.keepAspect;
+        function desc = im2desc...
+                ( this, im, kernel, norm )
             weights = this.setting.weights;
             numDscrber = numel( this.srcDscrber );
             did2desc = cell( numDscrber, 1 );
-            for did = 1 : numDscrber,
-                if aug
-                    [ h, w, ~ ] = size( im );
-                    rate = dstSideBacktup / srcSideBacktup;
-                    if keepAspect
-                        dsth = round( min( h, w ) * rate );
-                        dstw = dsth;
-                    else
-                        dsth = round( h * rate );
-                        dstw = round( w * rate );
-                    end
-                    ims = this.augIms( im, dsth, dstw );
-                else
-                    ims = { im };
-                end
-                numaug = numel( ims );
-                desc = cell( numaug, 1 );
-                for aid = 1 : numaug;
-                    im = ims{ aid };
-                    desc{ aid } = this.srcDscrber{ did }.im2desc( im );
-                end
-                desc = cat( 2, desc{ : } );
+            for did = 1 : numDscrber
+                desc = this.srcDscrber{ did }.im2desc( im );
                 desc = kernelMap( desc, kernel );
                 desc = nmlzVecs( desc, norm );
                 did2desc{ did } = desc * weights( did );
@@ -148,7 +101,7 @@ classdef ImDscrber < handle
                     this.srcDscrber{ dscrberId }.getName );
             else
                 numDscrber = numel( this.srcDscrber );
-                name = {  };
+                name = { };
                 name{ end + 1 } = ...
                     sprintf( 'ID_%s_OF_', this.setting.changes );
                 for did = 1 : numDscrber
@@ -163,8 +116,8 @@ classdef ImDscrber < handle
         end
         function dir = getDir( this, dscrberId )
             name = this.getName( dscrberId );
-            if length( name ) > 150, 
-                name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) ); 
+            if length( name ) > 150,
+                name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) );
                 name = sprintf( '%010d', name );
                 name = strcat( 'ID_', name );
             end
@@ -206,4 +159,3 @@ classdef ImDscrber < handle
         end
     end
 end
-

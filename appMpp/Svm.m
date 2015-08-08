@@ -1,13 +1,15 @@
-classdef SvmBch < handle
+classdef Svm < handle
     properties
-        srcDb;
+        db;
         srcImDscrber;
+        teidx2iid;
+        cid2teidx2score;
         result;
         setting;
     end    
     methods
-        function this = SvmBch( srcDb, srcImDscrber, setting )
-            this.srcDb                      = srcDb;
+        function this = Svm( db, srcImDscrber, setting )
+            this.db                         = db;
             this.srcImDscrber               = srcImDscrber;
             this.setting.kernel             = 'NONE';
             this.setting.norm               = 'L2';
@@ -27,7 +29,7 @@ classdef SvmBch < handle
                 upper( mfilename ) );
             cid2path = cellfun( ...
                 @( cid )this.getSvmPath( cid ), ...
-                num2cell( 1 : this.srcDb.getNumClass )', ...
+                num2cell( 1 : this.db.getNumClass )', ...
                 'UniformOutput', false );
             cid2exist = cellfun( ...
                 @( path )exist( path, 'file' ), ...
@@ -37,11 +39,11 @@ classdef SvmBch < handle
                 fprintf( '%s: No svm to train.\n', ...
                     upper( mfilename ) ); return; 
             end;
-            idx2iid = this.srcDb.getTriids;
+            idx2iid = this.db.getTriids;
             idx2iid = idx2iid( randperm( numel( idx2iid ) )' );
             idx2desc = this.loadDbDescs( idx2iid );
-            cid2idxs = this.srcDb.getCid2idxs( idx2iid );
-            cid2didxs = this.srcDb.getCid2didxs( idx2iid );
+            cid2idxs = this.db.getCid2idxs( idx2iid );
+            cid2didxs = this.db.getCid2didxs( idx2iid );
             this.makeDir;
             cnt = 0; cummt = 0; numIm = numel( cids );
             for cid = cids'; itime = tic;
@@ -54,10 +56,9 @@ classdef SvmBch < handle
             end
         end
         function evalSvm( this, addrss )
-            [ idx2cscore, cid2idxs, cid2didxs ] ...
+            [ this.teidx2iid, this.cid2teidx2score, cid2teidxs, cid2didxs ] ...
                 = this.testSvm;
-            mssg = this.writeReport...
-                ( idx2cscore, cid2idxs, cid2didxs );
+            mssg = this.writeReport( cid2teidxs, cid2didxs );
             cellfun( @( str )fprintf( '%s\n', str ), mssg );
             title = sprintf( '%s: TEST REPORT', ...
                 upper( mfilename ) );
@@ -123,12 +124,12 @@ classdef SvmBch < handle
                 save( fpath, 'w' );
             end
         end
-        function [ idx2cscore, cid2idxs, cid2didxs ] = ...
+        function [ idx2iid, idx2cscore, cid2idxs, cid2didxs ] = ...
                 testSvm( this )
             path = this.getTestPath;
-            idx2iid = this.srcDb.getTeiids;
-            cid2idxs = this.srcDb.getCid2idxs( idx2iid );
-            cid2didxs = this.srcDb.getCid2didxs( idx2iid );
+            idx2iid = this.db.getTeiids;
+            cid2idxs = this.db.getCid2idxs( idx2iid );
+            cid2didxs = this.db.getCid2didxs( idx2iid );
             try
                 data = load( path );
                 idx2cscore = data.idx2cscore;
@@ -144,86 +145,35 @@ classdef SvmBch < handle
         end
         function cid2w = loadSvm( this )
             fprintf( '%s: load svm.\n', upper( mfilename ) );
-            cids = num2cell( 1 : this.srcDb.getNumClass );
+            cids = num2cell( 1 : this.db.getNumClass );
             cid2w = cellfun...
                 ( @( cid )this.cid2svm( cid, [  ], [  ], [  ] ), ...
                 cids, 'UniformOutput', false );
             cid2w = cat( 2, cid2w{ : } );
         end
-        % Functions for evaluation metrics.
-        function metric = computeTopAcc( this, idx2cscore, topn )
-            idx2iid = this.srcDb.getTeiids;
-            idx2cid = cell2mat( this.srcDb.iid2cids( idx2iid ) );
-            idx2cid = idx2cid( : );
-            [ ~, idx2topcid ] = sort( idx2cscore, 1, 'descend' );
-            idx2topncid = idx2topcid( 1 : topn, : );
-            idx2hit = ~prod( idx2topncid - repmat( idx2cid', topn, 1 ), 1 );
-            metric = mean( idx2hit );
-        end
-        function [ cid2ap, cid2ap11 ] = computeAp...
-                ( this, idx2cscore, cid2idxs, cid2didxs )
-            numClass = this.srcDb.getNumClass;
-            numDesc = size( idx2cscore, 2 );
-            cid2ap = zeros( numClass, 1 );
-            cid2ap11 = zeros( numClass, 1 );
-            for cid = 1 : numClass
-                idx2y = -1 * ones( numDesc, 1 );
-                idx2y( cid2idxs{ cid } ) = 1;
-                idx2y( cid2didxs{ cid } ) = 0;
-                [ ~, ~, info ] = vl_pr( idx2y, idx2cscore( cid, : )' );
-                cid2ap( cid ) = info.ap;
-                cid2ap11( cid ) = info.ap_interp_11;
-            end
-        end
-        function cid2ap = computeVocAp...
-                ( this, idx2cscore, cid2idxs, cid2didxs )
-            numDesc = size( idx2cscore, 2 );
-            cid2ap = zeros( size( cid2idxs ) );
-            for cid = 1 : numel( cid2idxs )
-                gt = -1 * ones( numDesc, 1 );
-                gt( cid2idxs{ cid } ) = 1;
-                gt( cid2didxs{ cid } ) = 0;
-                [ ~, si ] = sort( -idx2cscore( cid, : ) );
-                tp = gt( si ) > 0;
-                fp = gt( si ) < 0;
-                fp = cumsum( fp );
-                tp = cumsum( tp );
-                rec = tp / sum( gt > 0 );
-                prec = tp ./ ( fp + tp );
-                ap = 0;
-                for t = 0 : 0.1 : 1
-                    p = max( prec( rec >= t ) );
-                    if isempty( p )
-                        p = 0;
-                    end
-                    ap = ap + p / 11;
-                end
-                cid2ap( cid ) = ap;
-            end
-        end
         % Functions to report the result.
         function mssg = writeReport...
-                ( this, idx2cscore, cid2idxs, cid2didxs )
+                ( this, cid2teidxs, cid2didxs )
             mssg = {  };
             mssg{ end + 1 } = '___________';
             mssg{ end + 1 } = 'TEST REPORT';
-            mssg{ end + 1 } = sprintf( 'DATABASE: %s', this.srcDb.name );
+            mssg{ end + 1 } = sprintf( 'DATABASE: %s', this.db.name );
             mssg{ end + 1 } = sprintf( 'IMAGE DESCRIBER: %s', this.srcImDscrber.getName );
             mssg{ end + 1 } = sprintf( 'CLASSIFIER: %s', this.getName );
-            % cid2ap = this.computeVocAp...
-            %     ( idx2cscore, cid2idxs, cid2didxs );
-            % mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
-            %     mean( cid2ap ) * 100 );
-            [ this.result.cid2ap, this.result.cid2ap11 ] = computeAp...
-                ( this, idx2cscore, cid2idxs, cid2didxs );
+            [ this.result.cid2ap, this.result.cid2ap11 ] = this.computeAp...
+                ( this.cid2teidx2score, cid2teidxs, cid2didxs );
             mssg{ end + 1 } = sprintf( 'MAP: %.2f%%', ...
                 mean( this.result.cid2ap ) * 100 );
             mssg{ end + 1 } = sprintf( 'MAP11: %.2f%%', ...
                 mean( this.result.cid2ap11 ) * 100 );
-            if ~this.srcDb.isMutiLabel
-                this.result.top1 = this.computeTopAcc( idx2cscore, 1 ) * 100;
+            if ~this.db.isMutiLabel,
+                idx2cid = cell2mat( this.db.iid2cids( this.teidx2iid ) );
+                this.result.top1 = this.computeTopAcc( idx2cid, this.cid2teidx2score, 1 ) * 100;
+                [ this.result.acc, this.result.cid2acc, this.result.confMat ] = ...
+                    this.computeAcc( idx2cid, this.cid2teidx2score );
                 mssg{ end + 1 } = sprintf( 'TOP1 ACCURACY: %.2f%%', this.result.top1 );
-            end
+                mssg{ end + 1 } = sprintf( 'ACCURACY: %.2f%%', this.result.acc );
+            end;
         end
         % Functions for data I/O.
         function name = getName( this )
@@ -241,7 +191,7 @@ classdef SvmBch < handle
                 name = strcat( 'SB_', name );
             end
             dir = fullfile...
-                ( this.srcDb.dstDir, name );
+                ( this.db.dstDir, name );
         end
         function dir = makeDir( this )
             dir = this.getDir;
@@ -257,6 +207,47 @@ classdef SvmBch < handle
             fname = 'TE.mat';
             fpath = fullfile...
                 ( this.getDir, fname );
+        end
+    end
+    methods( Static )
+        function metric = computeTopAcc( idx2cid, idx2cscore, topn )
+            idx2cid = idx2cid( : );
+            [ ~, idx2topcid ] = sort( idx2cscore, 1, 'descend' );
+            idx2topncid = idx2topcid( 1 : topn, : );
+            idx2hit = ~prod( idx2topncid - repmat( idx2cid', topn, 1 ), 1 );
+            metric = mean( idx2hit );
+        end
+        function [ cid2ap, cid2ap11 ] = computeAp...
+                ( idx2cscore, cid2idxs, cid2didxs )
+            numClass = numel( cid2idxs );
+            numDesc = size( idx2cscore, 2 );
+            cid2ap = zeros( numClass, 1 );
+            cid2ap11 = zeros( numClass, 1 );
+            for cid = 1 : numClass,
+                idx2y = -1 * ones( numDesc, 1 );
+                idx2y( cid2idxs{ cid } ) = 1;
+                idx2y( cid2didxs{ cid } ) = 0;
+                [ ~, ~, info ] = vl_pr( idx2y, idx2cscore( cid, : )' );
+                cid2ap( cid ) = info.ap;
+                cid2ap11( cid ) = info.ap_interp_11;
+            end;
+        end
+        function [ acc, cid2acc, confMat ] = computeAcc( idx2cid, idx2cscore )
+            numClass = max( idx2cid );
+            idx2cid = idx2cid( : );
+            [ ~, idx2topcid ] = sort( idx2cscore, 1, 'descend' );
+            idx2topcid = idx2topcid( 1, : );
+            confMat = zeros( numClass, numClass );
+            for cid = 1 : numClass,
+                pcs = idx2topcid( idx2cid == cid );
+                for i = 1 : numel( pcs ),
+                    confMat( cid, pcs( i ) ) = confMat( cid, pcs( i ) ) + 1;
+                end;
+                confMat( cid, : ) = confMat( cid, : ) / numel( pcs );
+            end;
+            confMat = confMat * 100;
+            cid2acc = diag( confMat );
+            acc = mean( cid2acc );
         end
     end
 end

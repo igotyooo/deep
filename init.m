@@ -15,12 +15,12 @@ path.db.voc2007.root                    = '/iron/db/VOC2007';
 path.db.coco2014.name                   = 'COCO2014';
 path.db.coco2014.funh                   = @DB_COCO2014;
 path.db.coco2014.root                   = '/iron/db/COCO2014';
-path.db.caltech_pedestrian.name         = 'CALTECH_PEDESTRIAN';
-path.db.caltech_pedestrian.funh         = @DB_CALTECH_PEDESTRIAN;
-path.db.caltech_pedestrian.root         = '/iron/db/CALTECH_PEDESTRIAN';
 path.db.ddsm.name                       = 'DDSM';
-path.db.ddsm.root                       = '/iron/db/DDSM';
 path.db.ddsm.funh                       = @DB_DDSM;
+path.db.ddsm.root                       = '/iron/db/DDSM';
+path.db.indoor_devices.name             = 'INDOOR_DEVICES';
+path.db.indoor_devices.funh             = @DB_INDOOR_DEVICES;
+path.db.indoor_devices.root             = '/iron/db/INDOOR_DEVICES';
 % Set pre-trained CNN path only.
 path.net.caffeRef.name                  = 'CAFFREF';
 path.net.caffeRef.path                  = '/iron/net/imagenet-caffe-ref.mat';

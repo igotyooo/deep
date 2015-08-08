@@ -1,21 +1,22 @@
-classdef NeuralRegnDscrberMammo < handle
+classdef NeuralRegnDscrber < handle
     properties
-        srcDb;
-        srcCnn;
+        db;
+        net;
         gmm;
         pca;
+        patchSide;
+        stride;
         settingDesc;
         settingDic;
-        useGpu;
     end
     methods
-        function this = NeuralRegnDscrberMammo...
-                ( srcDb, srcCnn, settingDesc, settingDic, useGpu )
-            this.srcDb                          = srcDb;
-            this.srcCnn                         = srcCnn;
-            this.useGpu                         = useGpu;
-            this.settingDesc.layerId            = numel( srcCnn.layers ) - 2;
-            this.settingDesc.maxSides           = [ 2400, 2100, 1800 ];
+        function this = NeuralRegnDscrber...
+                ( db, net, settingDesc, settingDic )
+            this.db                             = db;
+            this.net                            = net;
+            this.settingDesc.layerId            = numel( net.layers ) - 2;              % FC7 in AlexNet.
+            this.settingDesc.scalingCriteria    = 'MIN';                                % MIN, MAX, WIDTH, HEIGHT, AREA.
+            this.settingDesc.scaleId2numPixel   = round( 227 * 2 .^ ( 0 : 0.5 : 3 ) );
             this.settingDesc.pcaDim             = 128;
             this.settingDesc.kernelBeforePca    = 'NONE';
             this.settingDesc.normBeforePca      = 'L2';
@@ -28,14 +29,63 @@ classdef NeuralRegnDscrberMammo < handle
             this.settingDic = setChanges...
                 ( this.settingDic, settingDic, upper( mfilename ) );
         end
-        function init( this )
-            if this.useGpu,
-                this.srcCnn = vl_simplenn_move...
-                    ( this.srcCnn, 'gpu' );
+        function init( this, gpu )
+            if gpu,
+                this.net = vl_simplenn_move...
+                    ( this.net, 'gpu' );
             end;
-            idx = strfind( this.srcCnn.layers{end}.type, 'loss' );
-            if ~isempty( idx )
-                this.srcCnn.layers{end}.type( idx : end ) = [  ];
+            idx = strfind( this.net.layers{end}.type, 'loss' );
+            if ~isempty( idx ),
+                this.net.layers{ end }.type( idx : end ) = [  ];
+            end;
+            [ this.patchSide, this.stride ] = ...
+                getNetProperties( this.net, this.settingDesc.layerId );
+        end
+        function trainDic( this )
+            fpath = this.getDicPath;
+            try
+                data = load( fpath );
+                this.gmm = data.gmm;
+                this.pca = data.pca;
+                fprintf( '%s: Dic loaded.\n', ...
+                    upper( mfilename ) );
+            catch
+                kernelBeforePca = this.settingDesc.kernelBeforePca;
+                normBeforePca = this.settingDesc.normBeforePca;
+                pcaDim = this.settingDesc.pcaDim;
+                normAfterPca = this.settingDesc.normAfterPca;
+                numGaussian = this.settingDic.numGaussian;
+                this.pca = [  ];
+                this.gmm = [  ];
+                if isfinite( pcaDim ) || numGaussian,
+                    % Get descriptors.
+                    descs = this.sampleDescs;
+                    descs = kernelMap...
+                        ( descs, kernelBeforePca );
+                    descs = nmlzVecs...
+                        ( descs, normBeforePca );
+                    % Learn PCA and reduce dim.
+                    if isfinite( pcaDim ),
+                        fprintf( '%s: Train PCA.\n', upper( mfilename ) );
+                        [ this.pca.proj, this.pca.center ] = ...
+                            this.learnPca...
+                            ( pcaDim, descs, false, 0 );
+                        descs = this.pca.proj * ...
+                            bsxfun( @minus, descs, this.pca.center );
+                    end
+                    descs = nmlzVecs( descs, normAfterPca );
+                    % Learn GMM.
+                    if numGaussian,
+                        fprintf( '%s: Train GMM.\n', upper( mfilename ) );
+                        [ this.gmm.means, this.gmm.covs, this.gmm.priors ] = ...
+                            this.leanDicByGmm( descs, numGaussian );
+                    end
+                end                
+                fprintf( '%s: Save dic.\n', upper( mfilename ) );
+                gmm = this.gmm;
+                pca = this.pca;
+                save( fpath, 'gmm', 'pca' );
+                fprintf( '%s: Done.\n', upper( mfilename ) );
             end
         end
         function descDb( this )
@@ -44,7 +94,7 @@ classdef NeuralRegnDscrberMammo < handle
                 upper( mfilename ) );
             iid2vpath = cellfun( ...
                 @( iid )this.getDescPath( iid ), ...
-                num2cell( 1 : this.srcDb.getNumIm )', ...
+                num2cell( 1 : this.db.getNumIm )', ...
                 'UniformOutput', false );
             iid2exist = cellfun( ...
                 @( path )exist( path, 'file' ), ...
@@ -115,81 +165,33 @@ classdef NeuralRegnDscrberMammo < handle
         function [ rid2geo, rid2desc, imsize ] = ...
                 iid2rawregdesc( this, iid )
             im = imread...
-                ( this.srcDb.iid2impath{ iid } );
+                ( this.db.iid2impath{ iid } );
             [ rid2geo, rid2desc, imsize ] = ...
                 this.im2rawregdesc( im );
         end
-        function [ rid2geo, rid2desc, imsize ] = ...
+        function [ rid2tlbr, rid2desc, imSize ] = ...
                 im2rawregdesc( this, im )
             lyid = this.settingDesc.layerId;
-            sid2maxSide = this.settingDesc.maxSides;
-            avgImBackup = this.srcCnn.normalization.averageImage;
-            itpltn = this.srcCnn.normalization.interpolation;
-            patchsize = this.srcCnn.normalization.imageSize( 1 );
-            % Do the job.
-            numScale = numel( sid2maxSide );
-            imsize = size( im );
-            imMaxSide = max( imsize( 1 : 2 ) );
-            sid2rid2geo = cell( numScale, 1 );
-            sid2rid2desc = cell( numScale, 1 );
-            for sid = 1 : numScale
-                maxSide = sid2maxSide( sid );
-                if abs( maxSide / imMaxSide - 1 ) > 0.001
-                    im_ = imresize( im, ...
-                        maxSide / imMaxSide, ...
-                        'method', itpltn );
-                else
-                    im_ = im;
-                end
-                im_ = single( im_ );
-                imsize_ = size( im_ );
-                r = imsize_( 1 ); c = imsize_( 2 );
-                avgIm = imresize...
-                    ( avgImBackup, [ r, c ], ...
-                    'method', itpltn );
-                im_ = im_ - avgIm;
-                if this.useGpu, im_ = gpuArray( im_ ); end;
-                respns = my_simplenn...
-                    ( this.srcCnn, im_, [  ], [  ], ...
-                    'conserveMemory', true, ...
-                    'disableDropout', true, ...
-                    'extOnly', true, ...
-                    'targetLayerId', lyid );
-                % Form descriptors.
-                desc = respns( lyid + 1 ).x;
-                [ r, c, z ] = size( desc );
-                depthid = ( ( ( 1 : z ) - 1 ) * ( r * c ) )';
-                rcid = 1 : ( r * c );
-                [ depthid, rcid ] = meshgrid( depthid, rcid );
-                idx = reshape( ( depthid + rcid )', z * r * c, 1 );
-                rid2desc = gather( reshape( desc( idx ), z, r * c ) );
-                sid2rid2desc{ sid } = rid2desc; clear respns;
-                % Form geometries.
-                stride = 32; % It is not general!!!
-                [ cs, rs ] = meshgrid( 1 : c, 1 : r );
-                geo = cat( 3, rs, cs, rs, cs, sid * ones( r, c ) );
-                [ r, c, z ] = size( geo );
-                depthid = ( ( ( 1 : z ) - 1 ) * ( r * c ) )';
-                rcid = 1 : ( r * c );
-                [ depthid, rcid ] = meshgrid( depthid, rcid );
-                idx = reshape( ( depthid + rcid )', z * r * c, 1 );
-                geo = reshape( geo( idx ), z, r * c );
-                geo( 1 : 2, : ) = ( geo( 1 : 2, : ) - 1 ) * stride + 1;
-                geo( 3 : 4, : ) = geo( 1 : 2, : ) + patchsize - 1;
-                geo( 1 : 4, : ) = resizeTlbr( geo( 1 : 4, : ), imsize_, imsize );
-                sid2rid2geo{ sid } = round( geo );
-            end % Next scale.
-            % Set CNN back.
-            this.srcCnn.normalization.averageImage = avgImBackup;
-            % Aggregate for each layer.
-            rid2desc = cat( 2, sid2rid2desc{ : } );
-            rid2geo = cat( 2, sid2rid2geo{ : } );
-            % Filtering.
+            criteria = this.settingDesc.scalingCriteria;
+            sid2npix = this.settingDesc.scaleId2numPixel;
+            itpltn = this.net.normalization.interpolation;
+            keepAspect = this.net.normalization.keepAspect;
             regionFiltering = this.settingDesc.regionFiltering;
+            % Do the job.
+            imSize = size( im );
+            imSize = imSize( 1 : 2 )';
+            if keepAspect,
+                sid2size = scaleImage( sid2npix, criteria, imSize );
+            else
+                sid2size = [ sid2npix; sid2npix; ];
+            end;
+            [ rid2tlbr, rid2desc ] = extActivationMap...
+                ( im, this.net, lyid, sid2size, itpltn, this.patchSide, this.stride );
+            % Filtering if needed.
             if ~isempty( regionFiltering )
                 regionFiltering = str2func( regionFiltering );
-                rid2ok = regionFiltering( im, rid2geo );
-                rid2geo = rid2geo( :, rid2ok );
+                rid2ok = regionFiltering( im, rid2tlbr );
+                rid2tlbr = rid2tlbr( :, rid2ok );
                 rid2desc = rid2desc( :, rid2ok );
             end;
         end
@@ -207,9 +209,9 @@ classdef NeuralRegnDscrberMammo < handle
                 this.makeSmplDescDir;
                 maxNumSrcIm = 5000;
                 numSamplePerGaussian = 1000;
-                numIm = min( maxNumSrcIm, this.srcDb.getNumTrIm );
+                numIm = min( maxNumSrcIm, this.db.getNumTrIm );
                 numDescPerIm = ceil( numGaussian * numSamplePerGaussian / numIm );
-                iids = randsample( this.srcDb.getTriids, numIm );
+                iids = randsample( this.db.getTriids, numIm );
                 descs = cell( numIm, 1 );
                 cummt = 0;
                 for i = 1 : numIm; itime = tic; iid = iids( i );
@@ -232,72 +234,29 @@ classdef NeuralRegnDscrberMammo < handle
                     upper( mfilename ) );
             end
         end
-        function trainDic( this )
-            fpath = this.getDicPath;
-            try
-                data = load( fpath );
-                this.gmm = data.gmm;
-                this.pca = data.pca;
-                fprintf( '%s: Dic loaded.\n', ...
-                    upper( mfilename ) );
-            catch
-                kernelBeforePca = this.settingDesc.kernelBeforePca;
-                normBeforePca = this.settingDesc.normBeforePca;
-                pcaDim = this.settingDesc.pcaDim;
-                normAfterPca = this.settingDesc.normAfterPca;
-                numGaussian = this.settingDic.numGaussian;
-                this.pca = [  ];
-                this.gmm = [  ];
-                if isfinite( pcaDim ) || numGaussian,
-                    % Get descriptors.
-                    descs = this.sampleDescs;
-                    descs = kernelMap...
-                        ( descs, kernelBeforePca );
-                    descs = nmlzVecs...
-                        ( descs, normBeforePca );
-                    % Learn PCA and reduce dim.
-                    if isfinite( pcaDim ),
-                        fprintf( '%s: Train PCA.\n', upper( mfilename ) );
-                        [ this.pca.proj, this.pca.center ] = ...
-                            this.learnPca...
-                            ( pcaDim, descs, false, 0 );
-                        descs = this.pca.proj * ...
-                            bsxfun( @minus, descs, this.pca.center );
-                    end
-                    descs = nmlzVecs( descs, normAfterPca );
-                    % Learn GMM.
-                    if numGaussian,
-                        fprintf( '%s: Train GMM.\n', upper( mfilename ) );
-                        [ this.gmm.means, this.gmm.covs, this.gmm.priors ] = ...
-                            this.leanDicByGmm( descs, numGaussian );
-                    end
-                end                
-                fprintf( '%s: Save dic.\n', upper( mfilename ) );
-                gmm = this.gmm;
-                pca = this.pca;
-                save( fpath, 'gmm', 'pca' );
-                fprintf( '%s: Done.\n', upper( mfilename ) );
-            end
-        end
         % Functions for sample descriptor I/O.
         function name = getSmplDescName( this )
             regionFiltering = this.settingDesc.regionFiltering;
+            scalingCriteria = this.settingDesc.scalingCriteria;
+            scaleId2numPixel = this.settingDesc.scaleId2numPixel;
             if isempty( regionFiltering )
-                name = sprintf( 'NRDMSMPL_LI%d_MS%s_OF_%s', ...
+                name = sprintf( 'NRDMSMPL_LI%d_SC%s_NP%s_OF_%s', ...
                     this.settingDesc.layerId, ...
-                    mat2str( this.settingDesc.maxSides ), ...
-                    this.srcCnn.name );
+                    scalingCriteria, ...
+                    mat2str( scaleId2numPixel ), ...
+                    this.net.name );
             else
-                name = sprintf( 'NRDMSMPL_LI%d_MS%s_RF%s_OF_%s', ...
+                name = sprintf( 'NRDMSMPL_LI%d_SC%s_NP%s_RF%s_OF_%s', ...
                     this.settingDesc.layerId, ...
-                    mat2str( this.settingDesc.maxSides ), ...
+                    scalingCriteria, ...
+                    mat2str( scaleId2numPixel ), ...
                     upper( regionFiltering ), ...
-                    this.srcCnn.name );
+                    this.net.name );
             end
             name( strfind( name, '__' ) ) = '';
         end
         function dir = getSmplDescDir( this )
-            dir = this.srcDb.dstDir;
+            dir = this.db.dstDir;
         end
         function dir = makeSmplDescDir( this )
             dir = this.getSmplDescDir;
@@ -318,7 +277,7 @@ classdef NeuralRegnDscrberMammo < handle
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getDicDir( this )
-            dir = this.srcDb.dstDir;
+            dir = this.db.dstDir;
         end
         function dir = makeDicDir( this )
             dir = this.getDicDir;
@@ -339,7 +298,7 @@ classdef NeuralRegnDscrberMammo < handle
         function name = getDescName( this )
             name = sprintf( 'NRDM_%s_OF_%s', ...
                 this.settingDesc.changes, ...
-                this.srcCnn.name );
+                this.net.name );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
@@ -351,7 +310,7 @@ classdef NeuralRegnDscrberMammo < handle
                 name = strcat( 'NRDM_', name );
             end
             dir = fullfile...
-                ( this.srcDb.dstDir, name );
+                ( this.db.dstDir, name );
         end
         function dir = makeDescDir( this )
             dir = this.getDescDir;

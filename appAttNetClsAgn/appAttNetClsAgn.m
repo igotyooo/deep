@@ -20,7 +20,8 @@ setting.io.tsDb.snegIntOverObjMoreThan              = 0.3;
 setting.io.tsDb.snegIntOverObjLessThan              = 0.7;
 setting.io.tsDb.negIntOverObjLessThan               = 0.1;
 setting.io.tsNet.pretrainedNetName                  = path.net.vgg_m.name;
-setting.io.tsNet.suppressPretrainedLayerLearnRate   = 1 / 10;
+setting.io.tsNet.suppressPretrainedLayerLearnRate   = 1 / 4; % 1 / 10;
+setting.io.general.shuffleSequance                  = false;
 setting.io.general.dstSide                          = setting.io.tsDb.patchSide;
 setting.io.general.dstCh                            = 3;
 setting.io.general.batchSize                        = 128;
@@ -28,7 +29,8 @@ setting.net.normalizeImage                          = 'NONE';
 setting.net.weightDecay                             = 0.0005;
 setting.net.momentum                                = 0.9;
 setting.net.modelType                               = 'dropout';
-setting.net.learningRate                            = [ 0.01 * ones( 1, 80 ), 0.001 * ones( 1, 20 ) ];
+setting.net.learningRate                            = [ 0.01 * ones( 1, 25 ), 0.001 * ones( 1, 15 ) ];
+% setting.net.learningRate                            = [ 0.01 * ones( 1, 17 ), 0.001 * ones( 1, 10 ) ];
 reset( gpuDevice( setting.gpus ) );
 db = Db( setting.db, path.dstDir );
 db.genDb;
@@ -41,11 +43,6 @@ net = Net( io, setting.net );
 net.init;
 net.train( setting.gpus, 'visionresearchreport@gmail.com' );
 net.fetchBestNet;
-
-
-
-
-
 
 
 

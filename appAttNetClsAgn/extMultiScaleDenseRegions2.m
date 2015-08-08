@@ -1,5 +1,5 @@
 function rid2tlbr = extMultiScaleDenseRegions2...
-    ( imSize, stride, patchSide, sid2s, aid2a, violate )
+    ( imSize, stride, patchSide, sid2s, aid2a, dilate )
     imSize = imSize( 1 : 2 ); imSize = imSize( : );
     numScale = numel( sid2s );
     numAspect = numel( aid2a );
@@ -12,10 +12,10 @@ function rid2tlbr = extMultiScaleDenseRegions2...
             pc = patchSide / sid2s( s ) / aid2a( a );
             strdr = stride / sid2s( s );
             strdc = stride / sid2s( s ) / aid2a( a );
-            sr = 1 - pr * violate;
-            sc = 1 - pc * violate;
-            er = imSize( 1 ) - pr * ( 1 - violate ) + 1;
-            ec = imSize( 2 ) - pc * ( 1 - violate ) + 1;
+            sr = 1 - pr * dilate;
+            sc = 1 - pc * dilate;
+            er = imSize( 1 ) - pr * ( 1 - dilate ) + 1;
+            ec = imSize( 2 ) - pc * ( 1 - dilate ) + 1;
             r = sr : strdr : er;
             c = sc : strdc : ec;
             nr = numel( r );

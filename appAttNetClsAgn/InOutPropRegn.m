@@ -48,6 +48,7 @@ classdef InOutPropRegn < handle
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
             % General) Default parameters to provide batches.
+            this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.dstSide                         = this.settingTsDb.patchSide;
             this.settingGeneral.dstCh                           = 3;
             this.settingGeneral.batchSize                       = 256;
@@ -308,6 +309,7 @@ classdef InOutPropRegn < handle
         function [ sid2iid, sid2tlbr, sid2gt ] = ...
                 getRegnSeqInEpch( this, setid )
             rng( 'shuffle' );
+            shuffleSequance = this.settingGeneral.shuffleSequance;
             batchSize = this.settingGeneral.batchSize;
             if setid == 1, subTsDb = this.tsDb.tr; else subTsDb = this.tsDb.val; end;
             numObj = numel( subTsDb.oid2iid );
@@ -355,6 +357,12 @@ classdef InOutPropRegn < handle
                 sid2iid( sid ) = iid;
                 sid2tlbr( :, sid ) = regns( 1 : 4, ridx );
                 sid2gt( sid ) = bgdClsId;
+            end;
+            if shuffleSequance,
+                sids = randperm( numSample )';
+                sid2iid = sid2iid( sids );
+                sid2tlbr = sid2tlbr( :, sids );
+                sid2gt = sid2gt( sids );
             end;
         end
         function subTsDb = makeSubTsDb( this, setid )
