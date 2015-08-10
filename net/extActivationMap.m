@@ -23,8 +23,7 @@ function [ rid2tlbr, rid2desc ] = ...
         imSize_ = sid2size( :, sid );
         im_ = imresize( im, imSize_', 'method', itpltn );
         im_ = single( im_ );
-        avgIm_ = imresize( avgIm, imSize_', 'method', itpltn );
-        im_ = im_ - avgIm_;
+        im_ = normalizeImage( im_, avgIm, itpltn );
         if useGpu, im_ = gpuArray( im_ ); end;
         res = my_simplenn( ...
             net, im_, [  ], [  ], ...

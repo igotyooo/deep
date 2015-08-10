@@ -2,7 +2,6 @@ classdef PropObj < handle
     properties
         db;
         propNet;
-        rgbMean;
         stride;
         patchSide;
         scales;
@@ -13,10 +12,10 @@ classdef PropObj < handle
         function this = PropObj( db, propNet, setting )
             this.db = db;
             this.propNet = propNet;
-            this.setting.numScale               = 16;
-            this.setting.numAspect              = 16;
-            this.setting.confidence             = 0.97;
-            this.setting.violate                = 1 / 4;
+            this.setting.numScale               = 6;
+            this.setting.numAspect              = 6;
+            this.setting.confidence             = 0.90;
+            this.setting.dilate                 = 1 / 4;
             this.setting.posIntOverRegnMoreThan = 1 / 3;
             this.setting = setChanges...
                 ( this.setting, setting, upper( mfilename ) );
@@ -27,10 +26,11 @@ classdef PropObj < handle
             numAspect = this.setting.numAspect;
             confidence = this.setting.confidence;
             posIntOverRegnMoreThan = this.setting.posIntOverRegnMoreThan;
-            % Set RGB mean vector.
-            this.rgbMean = this.propNet.srcInOut.rgbMean;
+            % Fetch net on GPU.
+            this.propNet = Net.fetchNetOnGpu( this.propNet, gpus );
             % Determine stride and patch side.
-            this.determineInOutRelations( gpus );
+            [ this.patchSide, this.stride ] = ...
+                getNetProperties( this.propNet, numel( this.propNet.layers ) - 1 );
             % Determine multiple scales and aspect rates.
             trboxes = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == 1 );
             referenceSide = this.patchSide * sqrt( posIntOverRegnMoreThan );
@@ -38,10 +38,8 @@ classdef PropObj < handle
                 ( trboxes, referenceSide, numScale, confidence );
             this.aspects = determineAspectRates...
                 ( trboxes, numAspect, confidence );
-            % Fetch net on GPU.
-            this.propNet = Net.fetchNetOnGpu( this.propNet, gpus );
         end
-        function propObjInDb( this )
+        function propObj( this )
             iids = this.db.getTeiids;
             fprintf( '%s: Check if proposals exist.\n', ...
                 upper( mfilename ) );
@@ -63,49 +61,44 @@ classdef PropObj < handle
                     'Prop obj.', cummt );
             end;
         end
-        function [ did2tlbr, did2out ] = ...
-                iid2prop0( this, iid )
+        function [ rid2tlbr, rid2out ] = ...
+                iid2prop( this, iid )
+            % Initial guess.
             fpath = this.getPath( iid );
             try
                 data = load( fpath );
-                did2tlbr = data.det.did2tlbr;
-                did2out = data.det.did2out;
+                rid2tlbr = data.det.rid2tlbr;
+                rid2out = data.det.rid2out;
             catch
                 im = imread( this.db.iid2impath{ iid } );
-                [ did2tlbr, did2out ] = ...
+                [ rid2tlbr, rid2out ] = ...
                     this.im2prop0( im );
-                det.did2tlbr = did2tlbr;
-                det.did2out = did2out;
-                save( fpath, 'det' );
+                prop.rid2tlbr = rid2tlbr;
+                prop.rid2out = rid2out;
+                save( fpath, 'prop' );
             end;
+            % % Compute each region score here.
+            % % Scale/aspect selection.
+            % numScale = this.setting.numScale;
+            % numAspect = this.setting.numAspect;
+            % sids = this.settingInitMrg.selectScaleIds;
+            % aids = this.settingInitMrg.selectAspectIds;
+            % if numScale ~= numel( sids ),
+            %     did2ok = ismember( did2det( 5, : ), sids );
+            %     did2det = did2det( :, did2ok );
+            %     did2score = did2score( :, did2ok );
+            % end;
+            % if numAspect ~= numel( aids ),
+            %     did2ok = ismember( did2det( 6, : ), aids );
+            %     did2det = did2det( :, did2ok );
+            %     did2score = did2score( :, did2ok );
+            % end;
+            % % NMS.
+            % overlap = this.settingInitMrg.overlap;
+            % [ did2det, did2score, ~ ] = ...
+            %     nms( [ did2det; did2score ]', overlap );
+            % did2det = did2det';
         end
-        % function [ did2det, did2score ] = ...
-        %         iid2prop( this, iid )
-        %     % Initial detection.
-        %     [ did2det, did2out ] = ...
-        %         this.iid2prop0( iid );
-        %     % Compute each region score here.
-        %     % Scale/aspect selection.
-        %     numScale = this.setting.numScale;
-        %     numAspect = this.setting.numAspect;
-        %     sids = this.settingInitMrg.selectScaleIds;
-        %     aids = this.settingInitMrg.selectAspectIds;
-        %     if numScale ~= numel( sids ),
-        %         did2ok = ismember( did2det( 5, : ), sids );
-        %         did2det = did2det( :, did2ok );
-        %         did2score = did2score( :, did2ok );
-        %     end;
-        %     if numAspect ~= numel( aids ),
-        %         did2ok = ismember( did2det( 6, : ), aids );
-        %         did2det = did2det( :, did2ok );
-        %         did2score = did2score( :, did2ok );
-        %     end;
-        %     % NMS.
-        %     overlap = this.settingInitMrg.overlap;
-        %     [ did2det, did2score, ~ ] = ...
-        %         nms( [ did2det; did2score ]', overlap );
-        %     did2det = did2det';
-        % end
         function [ rid2det, rid2out ] = im2prop0( this, im )
             % Pre-filtering by initial guess.
             fprintf( '%s: Initial guess.\n', upper( mfilename ) );
@@ -191,41 +184,6 @@ classdef PropObj < handle
             imGlobal = cropAndNormalizeIm...
                 ( single( im ), imSize, [ 1 - mar2im; imSize + mar2im ], this.rgbMean );
             sideMargin = mar2im;
-        end
-        function determineInOutRelations( this, gpus )
-            % Determine patch size.
-            targetLyrId = numel( this.attNet.layers ) - 1;
-            psize = this.attNet.srcInOut.settingTsDb.dstSide;
-            ch = numel( this.rgbMean );
-            while true,
-                try
-                    im = zeros( psize, psize, ch, 'single' );
-                    if ~isempty( gpus ), im = gpuArray( im ); end;
-                    my_simplenn( ...
-                        this.attNet, im, [  ], [  ], ...
-                        'targetLayerId', targetLyrId );
-                    clear im; clear ans;
-                    psize = psize - 1;
-                catch
-                    psize = psize + 1;
-                    break;
-                end;
-            end
-            % Determine patch stride.
-            strd = 0;
-            while true,
-                im = zeros( psize + strd, psize, ch, 'single' );
-                if ~isempty( gpus ), im = gpuArray( im ); end;
-                res = my_simplenn( ...
-                    this.attNet, im, [  ], [  ], ...
-                    'targetLayerId', targetLyrId );
-                desc = res( targetLyrId + 1 ).x;
-                if size( desc, 1 ) == 2, break; end;
-                strd = strd + 1;
-                clear im; clear res;
-            end;
-            this.patchSize = psize;
-            this.stride = strd;
         end
         % Functions for identification.
         function name = getName( this )

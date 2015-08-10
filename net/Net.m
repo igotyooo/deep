@@ -173,7 +173,7 @@ classdef Net < handle
             legend( { 'Val', 'Net selected' } );
             grid on;
         end
-        % 3. PROVIDE CURRENT NETWORK.
+        % 4. PROVIDE CURRENT NETWORK.
         function [ net, netName ] = provdNet( this )
             net.layers = this.layers;
             net.normalization = this.normalization;

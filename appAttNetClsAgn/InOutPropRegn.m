@@ -29,7 +29,7 @@ classdef InOutPropRegn < handle
             this.settingTsDb.numScale                           = 16;
             this.settingTsDb.numAspect                          = 16;
             this.settingTsDb.confidence                         = 0.97;
-            this.settingTsDb.violate                            = 1 / 4;
+            this.settingTsDb.dilate                             = 1 / 4;
             % Parameters for positive mining.
             this.settingTsDb.posMinMargin                       = 0.1;
             this.settingTsDb.posIntOverRegnMoreThan             = 1 / 3;    % A target object should be large enough.
@@ -372,7 +372,7 @@ classdef InOutPropRegn < handle
             numScale = this.settingTsDb.numScale;
             numAspect = this.settingTsDb.numAspect;
             confidence = this.settingTsDb.confidence;
-            violate = this.settingTsDb.violate;
+            dilate = this.settingTsDb.dilate;
             % Parameters for positive mining.
             posMinMargin = this.settingTsDb.posMinMargin;
             posIntOverRegnMoreThan = this.settingTsDb.posIntOverRegnMoreThan;       % A target object should be large enough.
@@ -413,7 +413,7 @@ classdef InOutPropRegn < handle
                 numObj = size( oid2tlbr, 2 );
                 % Extract candidate regions and compute bisic informations.
                 rid2tlbr = extMultiScaleDenseRegions2...
-                    ( imSize, stride, patchSide, sid2s, aid2a, violate );
+                    ( imSize, stride, patchSide, sid2s, aid2a, dilate );
                 rid2rect = tlbr2rect( rid2tlbr );
                 rid2area = prod( rid2rect( 3 : 4, : ), 1 )';
                 oid2rect = tlbr2rect( oid2tlbr );
