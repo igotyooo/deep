@@ -165,13 +165,15 @@ classdef Net < handle
             this.currentEpch = bestEpch;
             fprintf( '%s: Fetch done.\n', ...
                 upper( mfilename ) );
+            figure;
             plot( 1 : numel( epch2perf ), epch2perf, 'b.-' ); hold on;
             plot( bestEpch, bestMetric, 'ro' ); hold off;
             set( gcf, 'color', 'w' );
             xlabel( 'Epoch' );
             ylabel( tsMetricName );
+            title( 'Network selection' );
             legend( { 'Val', 'Net selected' } );
-            grid on;
+            grid on; hold off;
         end
         % 4. PROVIDE CURRENT NETWORK.
         function [ net, netName ] = provdNet( this )

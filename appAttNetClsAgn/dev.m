@@ -148,3 +148,44 @@ figure( 2 ); plottlbr( oid2pregns{ 1 }, im, false, 'c' );
 % figure( 4 ); plottlbr( sid2nregns{ 3 }, im, true, 'c' );
 
 
+%% DETERMINE SCALES AND ASPECTS
+clc; close all; fclose all; clear all; 
+addpath( genpath( '..' ) ); init;
+setting.db = path.db.voc2007;
+db = Db( setting.db, path.dstDir );
+db.genDb;
+
+
+
+%%
+clc; close all; clearvars -except db;
+oid2tlbr = db.oid2bbox;
+numSize = 256;
+patchSide = 227;
+posIntOverRegnMoreThan = 1 / 3;
+referenceSide = patchSide * sqrt( posIntOverRegnMoreThan );
+[ sid2hs, sid2ws ] = determineImageScaling...
+    ( oid2tlbr, numSize, referenceSide, true );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

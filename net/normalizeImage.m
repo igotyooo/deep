@@ -1,7 +1,8 @@
 function image = normalizeImage( image, averageImage, interpolation )
-    [ r, c, ~ ] = size( image );
-    [ rav, cav, ~ ] = size( averageImage );
-    if rav * cav == 1, image = bsxfun( @minus, image, averageImage ); return; end;
-    if r ~= rav || c ~= cav, averageImage = imresize( averageImage, [ r, c ], 'method', interpolation ); end;
-    image = image - averageImage;
+    [ r, c, ch ] = size( image );
+    [ rav, cav, chav ] = size( averageImage );
+    if ch ~= chav, error( 'Inconsistent channels.\n' ); end;
+    if ( rav * cav ~= 1 ) && ( r ~= rav || c ~= cav ), ...
+            averageImage = imresize( averageImage, [ r, c ], 'method', interpolation ); end;
+    image = bsxfun( @minus, image, averageImage );
 end

@@ -6,6 +6,10 @@ classdef InOutPropRegn < handle
         db;                     % A general db.
         tsDb;                   % A task specific db to be made. If it is unnecessary, just fetch db.
         rgbMean;                % A task specific RGB mean to normalize images.
+        patchSide;
+        stride;
+        numChannel;
+        scales;
         numBchTr;               % Number of training batches in an epoch.
         numBchVal;              % Number of validation batches in an epoch.
         poolTr;                 % Training sample pool, where all samples are used up in an epoch.
@@ -23,34 +27,28 @@ classdef InOutPropRegn < handle
                 ( db, settingTsDb, settingTsNet, settingGeneral )
             this.db = db;
             this.tsMetricName = 'Top-1 err';
-            % Task specific) Default parameters for task specific db.
-            this.settingTsDb.stride                             = 32;
-            this.settingTsDb.patchSide                          = 227;
-            this.settingTsDb.numScale                           = 16;
-            this.settingTsDb.numAspect                          = 16;
-            this.settingTsDb.confidence                         = 0.97;
+            % Parameters for task specific db.
+            this.settingTsDb.numScaling                         = 256;
             this.settingTsDb.dilate                             = 1 / 4;
-            % Parameters for positive mining.
+            % Parameters for task specific db: positive mining.
             this.settingTsDb.posMinMargin                       = 0.1;
             this.settingTsDb.posIntOverRegnMoreThan             = 1 / 3;    % A target object should be large enough.
             this.settingTsDb.posIntOverTarObjMoreThan           = 0.99;     % A target object should be fully-included.
             this.settingTsDb.posIntOverSubObjMoreThan           = 0.6;      % A sub-object should be majorly-included.
             this.settingTsDb.posIntMajorityMoreThan             = 2;        % A target object should large enough w.r.t. the sub-objects.
-            % Parameters for semi-negative mining.
+            % Parameters for task specific db: semi-negative mining.
             this.settingTsDb.snegIntOverRegnMoreThan            = 1 / 36;	% A sub-object should not be too small.
             this.settingTsDb.snegIntOverObjMoreThan             = 0.3;      % The region is truncating the target object.
             this.settingTsDb.snegIntOverObjLessThan             = 0.7;      % The region is truncating the target object.
-            % Parameters for negative mining.
+            % Parameters for task specific db: negative mining.
             this.settingTsDb.negIntOverObjLessThan              = 0.1;      % Very small overlap is allowed for background region.
-            % Task specific) Default parameters for task specific net.
+            % Parameters for task specific net.
             global path;
             pretrainedNet                                       = path.net.vgg_m;
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
-            % General) Default parameters to provide batches.
+            % Parameters to provide batches.
             this.settingGeneral.shuffleSequance                 = false;
-            this.settingGeneral.dstSide                         = this.settingTsDb.patchSide;
-            this.settingGeneral.dstCh                           = 3;
             this.settingGeneral.batchSize                       = 256;
             % Apply user setting.
             this.settingTsDb = setChanges...
@@ -63,6 +61,13 @@ classdef InOutPropRegn < handle
         end
         % Prepare for all data to be used.
         function init( this )
+            % Determine patch stride and side.
+            fprintf( '%s: Determine stride and patch side.\n', ...
+                upper( mfilename ) );
+            net = this.provdInitNet;
+            [ this.patchSide, this.stride ] = ...
+                getNetProperties( net, numel( net.layers ) - 1 );
+            this.numChannel = size( net.layers{ 1 }.weights{ 1 }, 3 );
             % Compute a rgb mean vector.
             fpath = this.getRgbMeanPath;
             try
@@ -74,6 +79,18 @@ classdef InOutPropRegn < handle
                 save( fpath, 'data' );
                 this.rgbMean = data.rgbMean;
             end;
+            % Determine scaling factors.
+            fprintf( '%s: Determine scaling factors.\n', ...
+                upper( mfilename ) );
+            posIntOverRegnMoreThan = this.settingTsDb.posIntOverRegnMoreThan;
+            numScaling = this.settingTsDb.numScaling;
+            oid2tlbr = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == 1 );
+            referenceSide = this.patchSide * sqrt( posIntOverRegnMoreThan );
+            [ scalesRow, scalesCol ] = determineImageScaling...
+                ( oid2tlbr, numScaling, referenceSide, true );
+            this.scales = [ scalesRow, scalesCol ]';
+        end
+        function makeTsDb( this )
             % Reform the general db to a task-specific format.
             fpath = this.getTsDbPath;
             try
@@ -96,7 +113,7 @@ classdef InOutPropRegn < handle
                 fprintf( '%s: Done.\n', ...
                     upper( mfilename ) );
             end;
-            % General) Make training pool to be consumed in an epoch.
+            % Initialize pool.
             batchSize = this.settingGeneral.batchSize;
             [   this.poolTr.sid2iid, ...
                 this.poolTr.sid2tlbr, ...
@@ -104,7 +121,6 @@ classdef InOutPropRegn < handle
                 this.getRegnSeqInEpch( 1 );
             this.numBchTr = ...
                 numel( this.poolTr.sid2iid ) / batchSize;
-            % General) Make validation pool to be consumed in an epoch.
             [   this.poolVal.sid2iid, ...
                 this.poolVal.sid2tlbr, ...
                 this.poolVal.sid2gt ] = ...
@@ -169,9 +185,9 @@ classdef InOutPropRegn < handle
             initBiasLearningRate = 2;
             filterWeightDecay = 1;
             biasWeightDecay = 0;
-            dstSide = this.settingGeneral.dstSide;
-            dstCh = this.settingGeneral.dstCh;
-            numOutDim = max( this.tsDb.tr.oid2cid ) + 1;
+            dstSide = 227;
+            dstCh = 3;
+            numOutDim = numel( this.db.cid2name ) + 1;
             % Load pre-trained net.
             srcNet = load( preTrainedNetPath );
             % Initilaize mementum and set learning rate.
@@ -230,11 +246,6 @@ classdef InOutPropRegn < handle
         function numBchVal = getNumBatchVal( this )
             numBchVal = this.numBchVal;
         end
-        function imsize = getImSize( this )
-            dstSide = this.settingGeneral.dstSide;
-            dstCh = this.settingGeneral.dstCh;
-            imsize = [ dstSide; dstSide; dstCh; ];
-        end
         function tsMetricName = getTsMetricName( this )
             tsMetricName = this.tsMetricName;
         end
@@ -252,7 +263,7 @@ classdef InOutPropRegn < handle
     %%%%%%%%%%%%%%%%%%%%%%
     methods( Access = private )
         function rgbMean = computeRgbMean( this )
-            dstCh = this.settingGeneral.dstCh;
+            dstCh = this.numChannel;
             idx2iid = this.db.getTriids;
             numIm = numel( idx2iid );
             batchSize = 256;
@@ -283,8 +294,9 @@ classdef InOutPropRegn < handle
         function [ ims, gts ] = makeImGtPairs...
                 ( this, iid2impath, sid2iid, sid2tlbr, sid2gt )
             % Set Params.
-            dstSide = this.settingGeneral.dstSide;
-            dstCh = this.settingGeneral.dstCh;
+            dstSide = this.patchSide;
+            dstCh = this.numChannel;
+            interpolation = 'bicubic';
             % Read images.
             [ idx2iid, ~, sid2idx ] = unique( sid2iid );
             idx2impath = iid2impath( idx2iid );
@@ -297,10 +309,10 @@ classdef InOutPropRegn < handle
                 im = idx2im{ sid2idx( sid ) };
                 if dstCh == 1 && size( im, 3 ) == 3, im = mean( im, 3 ); end;
                 if dstCh == 3 && size( im, 3 ) == 1, im = cat( 3, im, im, im ); end;
-                im = cropAndNormalizeIm( im, size( im ), wind, this.rgbMean );
+                im = normalizeAndCropImage( im, wind, this.rgbMean, interpolation );
                 if ceil( rand - 0.5 ), im = fliplr( im ); end;
                 sid2im( :, :, :, sid ) = imresize...
-                    ( im, [ dstSide, dstSide ], 'bicubic' );
+                    ( im, [ dstSide, dstSide ], interpolation );
             end;
             ims = sid2im;
             % Merge ground-truths into a same shape of net output.
@@ -367,11 +379,7 @@ classdef InOutPropRegn < handle
         end
         function subTsDb = makeSubTsDb( this, setid )
             % Set parameters.
-            stride = this.settingTsDb.stride;
-            patchSide = this.settingTsDb.patchSide;
-            numScale = this.settingTsDb.numScale;
-            numAspect = this.settingTsDb.numAspect;
-            confidence = this.settingTsDb.confidence;
+            numSize = size( this.scales, 2 );
             dilate = this.settingTsDb.dilate;
             % Parameters for positive mining.
             posMinMargin = this.settingTsDb.posMinMargin;
@@ -385,13 +393,6 @@ classdef InOutPropRegn < handle
             snegIntOverObjLessThan = this.settingTsDb.snegIntOverObjLessThan;       % The region is truncating the target object.
             % Parameters for negative mining.
             negIntOverObjLessThan = this.settingTsDb.negIntOverObjLessThan;         % Very small overlap is allowed for background region.
-            % Determine scales and aspects.
-            trboxes = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == 1 );
-            referenceSide = patchSide * sqrt( posIntOverRegnMoreThan );
-            sid2s = determineScales...
-                ( trboxes, referenceSide, numScale, confidence );
-            aid2a = determineAspectRates...
-                ( trboxes, numAspect, confidence );
             % Do the job.
             newiid2iid = find( this.db.iid2setid == setid );
             newiid2iid = newiid2iid( randperm( numel( newiid2iid ) )' );
@@ -407,13 +408,19 @@ classdef InOutPropRegn < handle
             for newiid = 1 : numIm;
                 itime = tic;
                 iid = newiid2iid( newiid );
-                imSize = this.db.iid2size( :, iid );
+                imSize0 = this.db.iid2size( :, iid );
                 oid2tlbr = this.db.oid2bbox( :, this.db.iid2oids{ iid } );
                 oid2cid = this.db.oid2cid( this.db.iid2oids{ iid } );
                 numObj = size( oid2tlbr, 2 );
                 % Extract candidate regions and compute bisic informations.
-                rid2tlbr = extMultiScaleDenseRegions2...
-                    ( imSize, stride, patchSide, sid2s, aid2a, dilate );
+                sid2size = round( bsxfun( @times, this.scales, imSize0 ) );
+                rid2tlbr = ...
+                    extractDenseRegions( ...
+                    imSize0, ...
+                    sid2size, ...
+                    this.patchSide, ...
+                    this.stride, ...
+                    dilate );
                 rid2rect = tlbr2rect( rid2tlbr );
                 rid2area = prod( rid2rect( 3 : 4, : ), 1 )';
                 oid2rect = tlbr2rect( oid2tlbr );
@@ -450,7 +457,7 @@ classdef InOutPropRegn < handle
                         ptlbrs( 4, ptlbrs( 4, : ) < oid2mgtlbr( 4, oid ) ) = oid2mgtlbr( 4, oid );
                         oid2pregns{ oid } = ptlbrs;
                     else
-                        oid2pregns{ oid } = [ oid2mgtlbr( :, oid ); 0; 0; ];
+                        oid2pregns{ oid } = [ oid2mgtlbr( :, oid ); 0; ];
                     end;
                 end;
                 % Semi-negative mining.
@@ -476,7 +483,7 @@ classdef InOutPropRegn < handle
                         snregns( 2, 2 ) = snregns( 2, 2 ) + w;
                         snregns( 3, 3 ) = snregns( 3, 3 ) - h;
                         snregns( 4, 4 ) = snregns( 4, 4 ) - w;
-                        snregns = cat( 1, snregns, zeros( 2, 4, 'single' ) );
+                        snregns = cat( 1, snregns, zeros( 1, 4, 'single' ) );
                         oid2snregns{ oid } = snregns;
                     end;
                 end;
@@ -484,8 +491,8 @@ classdef InOutPropRegn < handle
                 % Very small overlap is allowed for background region.
                 rid2ok = all( rid2oid2ioo <= negIntOverObjLessThan, 2 );
                 nrid2tlbr = rid2tlbr( :, rid2ok );
-                sid2nregns = cell( numScale, 1 );
-                for sid = 1 : numScale,
+                sid2nregns = cell( numSize, 1 );
+                for sid = 1 : numSize,
                     nrids = find( nrid2tlbr( 5, : ) == sid );
                     nrids = randsample( nrids, min( numel( nrids ), 500 ) );
                     sid2nregns{ sid } = nrid2tlbr( :, nrids );
