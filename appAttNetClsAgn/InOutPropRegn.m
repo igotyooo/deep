@@ -48,6 +48,7 @@ classdef InOutPropRegn < handle
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
             % Parameters to provide batches.
+            this.settingGeneral.superviseTruncatingKnowledge    = false;
             this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.batchSize                       = 256;
             % Apply user setting.
@@ -175,6 +176,8 @@ classdef InOutPropRegn < handle
         end
         function [ net, netName ] = provdInitNet( this )
             % Set parameters.
+            useTruncKnowlg = ...
+                this.settingGeneral.superviseTruncatingKnowledge;
             preTrainedNetPath = ...
                 this.settingTsNet.pretrainedNetPath;
             suppPtdLyrLearnRate = ...
@@ -187,7 +190,11 @@ classdef InOutPropRegn < handle
             biasWeightDecay = 0;
             dstSide = 227;
             dstCh = 3;
-            numOutDim = numel( this.db.cid2name ) + 1;
+            if useTruncKnowlg,
+                numOutDim = numel( this.db.cid2name ) + 2;
+            else
+                numOutDim = numel( this.db.cid2name ) + 1;
+            end;
             % Load pre-trained net.
             srcNet = load( preTrainedNetPath );
             % Initilaize mementum and set learning rate.
@@ -232,7 +239,12 @@ classdef InOutPropRegn < handle
             net.normalization.imageSize = [ dstSide, dstSide, dstCh ];
             net.normalization.interpolation = 'bicubic';
             net.classes.name = this.db.cid2name;
-            net.classes.name{ end + 1 }   = 'background';
+            if useTruncKnowlg,
+                net.classes.name{ end + 1 }   = 'truncating';
+                net.classes.name{ end + 1 }   = 'background';
+            else
+                net.classes.name{ end + 1 }   = 'background';
+            end;
             net.classes.description = net.classes.name;
             netName = this.getTsNetName;
         end
@@ -321,12 +333,19 @@ classdef InOutPropRegn < handle
         function [ sid2iid, sid2tlbr, sid2gt ] = ...
                 getRegnSeqInEpch( this, setid )
             rng( 'shuffle' );
+            useTruncKnowlg = this.settingGeneral.superviseTruncatingKnowledge;
             shuffleSequance = this.settingGeneral.shuffleSequance;
             batchSize = this.settingGeneral.batchSize;
             if setid == 1, subTsDb = this.tsDb.tr; else subTsDb = this.tsDb.val; end;
             numObj = numel( subTsDb.oid2iid );
             numSample = ceil( numObj * 3 / batchSize ) * batchSize;
-            bgdClsId = max( subTsDb.oid2cid ) + 1;
+            if useTruncKnowlg,
+                trunkClsId = max( subTsDb.oid2cid ) + 1;
+                bgdClsId = trunkClsId + 1;
+            else
+                trunkClsId = max( subTsDb.oid2cid ) + 1;
+                bgdClsId = trunkClsId;
+            end;
             sid2iid = zeros( numSample, 1, 'single' );
             sid2tlbr = zeros( 4, numSample, 'single' );
             sid2gt = zeros( numSample, 1, 'single' );
@@ -354,7 +373,7 @@ classdef InOutPropRegn < handle
                 sid = sid + 1;
                 sid2iid( sid ) = iid;
                 sid2tlbr( :, sid ) = regns( 1 : 4, ridx );
-                sid2gt( sid ) = bgdClsId;
+                sid2gt( sid ) = trunkClsId;
                 % Sample a negative region.
                 if sid == numSample, break; end;
                 regns = subTsDb.iid2sid2negregns{ iid };
