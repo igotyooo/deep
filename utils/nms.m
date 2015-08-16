@@ -1,4 +1,4 @@
-function top = nms(boxes, overlap)
+function pick = nms(boxes, overlap)
 % top = nms_fast(boxes, overlap)
 % Non-maximum suppression. (FAST VERSION)
 % Greedily select high-scoring detections and skip detections
@@ -10,7 +10,7 @@ function top = nms(boxes, overlap)
 % Tomasz Maliseiwicz (tomasz@cmu.edu)
 
 if isempty(boxes)
-  top = [];
+  pick = [];
   return;
 end
 
@@ -46,4 +46,3 @@ while ~isempty(I)
 end
 
 pick = pick(1:(counter-1));
-top = boxes(pick,:);
