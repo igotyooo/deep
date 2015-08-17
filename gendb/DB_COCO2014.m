@@ -180,6 +180,8 @@ function [  cid2name, ...
         myanno.( setnames{ 1 } ).oid2bbox, ...
         myanno.( setnames{ 2 } ).oid2bbox );
     oid2diff = false( size( oid2iid ) );
+    iid2size = single( iid2size);
+    oid2bbox = single( oid2bbox );
     oid2cont = cell( size( oid2cid ) );
     fprintf( 'Done.\n' );
 
