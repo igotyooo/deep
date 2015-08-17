@@ -1,6 +1,19 @@
-% IN:  DB.
-% OUT: Images-GT paies per epoch.
-% Task-specific implementation required.
+% 1. Remaining issues to define postive regions.
+%       1) A sub-object should be truncated enough (even if it occupies large area).
+%          e.g. a small cat (target) stting on a sofa (sub-object).
+%       2) A sub-object should occupy a small enough area.
+%          e.g. a person (target) holing a bottle (sub-object).
+%       Is these really neccessary? 
+%       Why should we reject a small cat sitting on a small chair?
+%       Why should we reject a small chair where a small cat is sitting on?
+%       Then, if we ignore these constraints, how can we handle two objects with similar sizes?
+%       -> Simply set a majority factor. 
+%       (i.e. fully-included target object size / "fully"-included sub-object size > 1.5)
+%       This majority factor should not be too large to prevent rejecting a small cat setting on a small chair.
+% 2. Remaining issues to define semi-negative regions.
+%       1) All fully-included object are small enough.
+%       2) All fully included objects have similar sizes.
+%       Is these really neccessary?
 classdef InOutPropRegn < handle
     properties
         db;                     % A general db.
