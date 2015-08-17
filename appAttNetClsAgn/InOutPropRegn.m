@@ -524,9 +524,10 @@ classdef InOutPropRegn < handle
                 rid2ok = all( rid2oid2ioo <= negIntOverObjLessThan, 2 );
                 nrid2tlbr = rid2tlbr( :, rid2ok );
                 sid2nregns = cell( numSize, 1 );
+                numMaxRegnPerSize = 100; % 500;
                 for sid = 1 : numSize,
                     nrids = find( nrid2tlbr( 5, : ) == sid );
-                    nrids = randsample( nrids, min( numel( nrids ), 500 ) );
+                    nrids = randsample( nrids, min( numel( nrids ), numMaxRegnPerSize ) );
                     sid2nregns{ sid } = nrid2tlbr( :, nrids );
                 end;
                 newoids = ( newoid : newoid + numObj - 1 )';
