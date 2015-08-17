@@ -5,23 +5,26 @@ classdef PropObj < handle
         stride;
         patchSide;
         scales;
-        settingProp0;
-        settingProp;
+        settingMain;
+        settingPost;
     end
     methods( Access = public )
-        function this = PropObj( db, propNet, settingProp0 )
+        function this = PropObj( db, propNet, settingMain, settingPost )
             this.db = db;
             this.propNet = propNet;
-            this.settingProp0.numScaling = 24;
-            this.settingProp0.dilate = 1 / 4;
-            this.settingProp0.posIntOverRegnMoreThan = 1 / 3;
-            this.settingProp0 = setChanges...
-                ( this.settingProp0, settingProp0, upper( mfilename ) );
+            this.settingMain.numScaling = 24;
+            this.settingMain.dilate = 1 / 4;
+            this.settingMain.posIntOverRegnMoreThan = 1 / 3;
+            this.settingPost.overlap = 0.7;
+            this.settingMain = setChanges...
+                ( this.settingMain, settingMain, upper( mfilename ) );
+            this.settingPost = setChanges...
+                ( this.settingPost, settingPost, upper( mfilename ) );
         end
         function init( this, gpus )
             % Set parameters.
-            numScaling = this.settingProp0.numScaling;
-            posIntOverRegnMoreThan = this.settingProp0.posIntOverRegnMoreThan;
+            numScaling = this.settingMain.numScaling;
+            posIntOverRegnMoreThan = this.settingMain.posIntOverRegnMoreThan;
             % Fetch net on GPU.
             this.propNet.layers{ end }.type = 'softmax';
             this.propNet = Net.fetchNetOnGpu( this.propNet, gpus );
@@ -53,6 +56,7 @@ classdef PropObj < handle
             this.makeDir;
             iids = iids( ~exists );
             numIm = numel( iids );
+            if ~numIm, fprintf( '%s: No im to process.\n', upper( mfilename ) ); end;
             cummt = 0;
             for iidx = 1 : numIm; itime = tic;
                 iid = iids( iidx );
@@ -63,48 +67,48 @@ classdef PropObj < handle
                     'Prop obj.', cummt );
             end;
         end
-        function [ rid2tlbr, rid2out ] = ...
+        function [ rid2tlbr, rid2score, rid2cid ] = ...
                 iid2prop( this, iid )
             % Initial guess.
             fpath = this.getPath( iid );
             try
                 data = load( fpath );
-                rid2tlbr = data.det.rid2tlbr;
-                rid2out = data.det.rid2out;
+                rid2tlbr = data.prop.rid2tlbr;
+                rid2out = data.prop.rid2out;
             catch
                 im = imread( this.db.iid2impath{ iid } );
-                [ rid2tlbr, rid2out ] = ...
+                [ rid2out, rid2tlbr ] = ...
                     this.im2prop0( im );
                 prop.rid2tlbr = rid2tlbr;
                 prop.rid2out = rid2out;
                 save( fpath, 'prop' );
             end;
             if nargout,
-                % % Scale/aspect selection.
-                % numScale = this.settingProp0.numScale;
-                % numAspect = this.settingProp0.numAspect;
-                % sids = this.settingProp.selectScaleIds;
-                % aids = this.settingProp.selectAspectIds;
-                % if numScale ~= numel( sids ),
-                %     did2ok = ismember( rid2tlbr( 5, : ), sids );
-                %     did2det = did2det( :, did2ok );
-                %     did2score = did2score( :, did2ok );
-                % end;
-                % if numAspect ~= numel( aids ),
-                %     did2ok = ismember( did2det( 6, : ), aids );
-                %     did2det = did2det( :, did2ok );
-                %     did2score = did2score( :, did2ok );
-                % end;
-                % % Compute each region score here.
-                % % NMS.
-                % overlap = this.settingInitMrg.overlap;
-                % [ did2det, did2score, ~ ] = ...
-                %     nms( [ did2det; did2score ]', overlap );
-                % did2det = did2det';
+                % Compute each region score.
+                numOut = size( this.propNet.layers{ end - 1 }.weights{ 1 }, 4 );
+                numClass = this.db.getNumClass;
+                [ rid2score, rid2cid ] = ...
+                    max( rid2out, [  ], 1 );
+                if numOut == numClass + 1,
+                    rid2ok = rid2cid ~= numClass + 1;
+                elseif numOut == numClass + 2,
+                    rid2ok = rid2cid ~= ( numClass + 1 ) & rid2cid ~= ( numClass + 2 );
+                end;
+                rid2out = rid2out( :, rid2ok );
+                rid2tlbr = rid2tlbr( 1 : 4, rid2ok );
+                rid2cid = rid2cid( rid2ok );
+                rid2score = rid2score( rid2ok );
+                rid2score = rid2score * 2 - sum( rid2out, 1 );
+                % Merge.
+                overlap = this.settingPost.overlap;
+                ok = nms_iou( [ rid2tlbr; rid2score; ]', overlap );
+                rid2tlbr = rid2tlbr( :, ok );
+                rid2score = rid2score( :, ok );
+                rid2cid = rid2cid( ok );
             end;
         end
         function [ rid2out, rid2tlbr ] = im2prop0( this, im )
-            dilate = this.settingProp0.dilate;
+            dilate = this.settingMain.dilate;
             [ r, c, ~ ] = size( im );
             imSize0 = [ r; c; ];
             sid2size = round( bsxfun( @times, this.scales, imSize0 ) );
@@ -130,8 +134,8 @@ classdef PropObj < handle
         function name = getName( this )
             name = sprintf( ...
                 'PROP_%s_OF_%s', ...
-                this.settingProp0.changes, ...
-                this.propNet.getNetName );
+                this.settingMain.changes, ...
+                this.propNet.name );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
