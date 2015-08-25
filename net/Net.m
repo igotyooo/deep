@@ -1,6 +1,6 @@
 classdef Net < handle
     properties
-        srcInOut;
+        inout;
         initNetName;
         currentEpch;
         isinit;
@@ -19,8 +19,8 @@ classdef Net < handle
     % Public interface. The following functions are used only. %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods( Access = public )
-        function this = Net( srcInOut, setting )
-            this.srcInOut                           = srcInOut;
+        function this = Net( inout, setting )
+            this.inout                           = inout;
             this.initNetName                        = 'RND';
             this.currentEpch                        = 0;
             this.setting.normalizeImage             = 'RGBMEAN'; % 'AVGIM';
@@ -37,7 +37,7 @@ classdef Net < handle
         end
         % 1. INITIALIZE NETWORK.
         function init( this )
-            [ net, netName ] = this.srcInOut.provdInitNet;
+            [ net, netName ] = this.inout.provdInitNet;
             this.initNetName = netName;
             this.layers = net.layers;
             this.classes = net.classes;
@@ -128,9 +128,9 @@ classdef Net < handle
                 % Copy layers.
                 this.layers = net.layers;
                 % Update statistics.
-                batchSize = this.srcInOut.getBatchSize;
-                numBchTr = this.srcInOut.getNumBatchTr;
-                numBchVal = this.srcInOut.getNumBatchVal;
+                batchSize = this.inout.getBatchSize;
+                numBchTr = this.inout.getNumBatchTr;
+                numBchVal = this.inout.getNumBatchVal;
                 this.eid2energyTr( end + 1 ) = energyTr / ( batchSize * numBchTr );
                 this.eid2metricTr( end + 1 ) = metricTr / ( batchSize * numBchTr );
                 this.eid2energyVal( end + 1 ) = energyVal / ( batchSize * numBchVal );
@@ -154,7 +154,7 @@ classdef Net < handle
             epch2perf = this.eid2metricVal;
             [ bestMetric, bestEpch ] = min( epch2perf );
             bestTsMetricVal = epch2perf( bestEpch );
-            tsMetricName = this.srcInOut.getTsMetricName;
+            tsMetricName = this.inout.getTsMetricName;
             fprintf( ...
                 '%s: Load net of epch %d. (%s of %.4f)\n', ...
                 upper( mfilename ), ...
@@ -188,7 +188,7 @@ classdef Net < handle
                 name = sprintf( 'NET_E%03d_%s_OF_%s', ...
                     this.currentEpch, ...
                     this.setting.changes, ...
-                    this.srcInOut.getName );
+                    this.inout.getName );
             else
                 if this.isinit
                     name = sprintf( 'NET_E%03d_%s', ...
@@ -199,7 +199,7 @@ classdef Net < handle
                         this.currentEpch, ...
                         this.setting.changes, ...
                         this.initNetName, ...
-                        this.srcInOut.getName );
+                        this.inout.getName );
                 end
             end
             name( strfind( name, '__' ) ) = '';
@@ -218,13 +218,13 @@ classdef Net < handle
                 fprintf( '%s: Im stats loaded.\n', ...
                     upper( mfilename ) );
             catch
-                numBchTr = this.srcInOut.numBchTr;
+                numBchTr = this.inout.numBchTr;
                 averageImage = cell( numBchTr, 1 );
                 rgbMean = cell( numBchTr, 1 );
                 rgbCovariance = cell( numBchTr, 1 );
                 cummt = 0;
                 for bid = 1 : numBchTr; btime = tic;
-                    ims = this.srcInOut.provdBchTr;
+                    ims = this.inout.provdBchTr;
                     rgb = reshape( permute( ims, [ 3, 1, 2, 4 ] ), 3, [  ] );
                     numPixel = size( rgb, 2 );
                     averageImage{ bid } = mean( ims, 4 );
@@ -263,8 +263,8 @@ classdef Net < handle
             learnRate = this.setting.learningRate( epch );
             weightDecay = this.setting.weightDecay;
             momentum = this.setting.momentum;
-            batchSize = this.srcInOut.getBatchSize;
-            numBchTr = this.srcInOut.getNumBatchTr;
+            batchSize = this.inout.getBatchSize;
+            numBchTr = this.inout.getNumBatchTr;
             energy = 0;
             metric = 0;
             one = single( 1 );
@@ -285,7 +285,7 @@ classdef Net < handle
             res = [  ]; mmap = [  ];
             for b = 1 : numBchTr; btime = tic;
                 % Get batch images and corrersponding GT.
-                [ ims, gts ] = this.srcInOut.provdBchTr;
+                [ ims, gts ] = this.inout.provdBchTr;
                 % Put data to GPU memory.
                 if numGpus > 0, ims = gpuArray( ims ); gts = gpuArray( gts ); one = gpuArray( one ); end;
                 % Normalize input image.
@@ -304,7 +304,7 @@ classdef Net < handle
                 energy = energy + ...
                     sum( double( gather( res( end ).x ) ) );
                 metric = metric + ...
-                    this.srcInOut.computeTsMetric( res, gts );
+                    this.inout.computeTsMetric( res, gts );
                 % Update w by gradients.
                 if numGpus > 1,
                     % Make a sharable memory to wirite gradients for each gpu.
@@ -332,15 +332,15 @@ classdef Net < handle
             epch = this.currentEpch + 1;
             numGpus = numel( this.gpus );
             numEpch = numel( this.setting.learningRate );
-            batchSize = this.srcInOut.getBatchSize;
-            numBchVal = this.srcInOut.getNumBatchVal;
+            batchSize = this.inout.getBatchSize;
+            numBchVal = this.inout.getNumBatchVal;
             energy = 0;
             metric = 0;
             % For each batch,
             res = [  ];
             for b = 1 : numBchVal; btime = tic;
                 % Get batch images and corrersponding GT.
-                [ ims, gts ] = this.srcInOut.provdBchVal;
+                [ ims, gts ] = this.inout.provdBchVal;
                 % Put data to GPU memory.
                 if numGpus > 0, ims = gpuArray( ims ); gts = gpuArray( gts ); end;
                 % Normalize input image.
@@ -359,7 +359,7 @@ classdef Net < handle
                 energy = energy + ...
                     sum( double( gather( res( end ).x ) ) );
                 metric = metric + ...
-                    this.srcInOut.computeTsMetric( res, gts );
+                    this.inout.computeTsMetric( res, gts );
                 % Print out the status.
                 btime = toc( btime );
                 fprintf( '%s: ', upper( mfilename ) );
@@ -398,7 +398,7 @@ classdef Net < handle
             legend( { 'Train', 'Val' }, 'Location', 'Best' );
             grid on;
             % Plot task-specific evaluation metric.
-            tsMetricName = this.srcInOut.getTsMetricName;
+            tsMetricName = this.inout.getTsMetricName;
             subplot( 1, 2, 2 );
             plot( 1 : numEpch, ...
                 this.eid2metricTr, 'k.-' );
@@ -413,16 +413,16 @@ classdef Net < handle
         % Functions for report training.
         function [ title, mssg ] = writeTrainReport( this )
             epch = length( this.eid2energyVal );
-            tsMetricName = this.srcInOut.getTsMetricName;
+            tsMetricName = this.inout.getTsMetricName;
             title = sprintf( '%s: TRAINING REPORT AT EPOCH %d', ...
                 upper( mfilename ), epch );
             mssg = {  };
             mssg{ end + 1 } = '_______________';
             mssg{ end + 1 } = 'TRAINING REPORT';
             mssg{ end + 1 } = sprintf( 'DATABASE: %s', ...
-                this.srcInOut.db.name );
+                this.inout.db.name );
             mssg{ end + 1 } = sprintf( 'INOUT: %s', ...
-                this.srcInOut.getName );
+                this.inout.getName );
             mssg{ end + 1 } = sprintf( 'NET: %s', ...
                 this.getNetDirName );
             mssg{ end + 1 } = ...
@@ -457,7 +457,7 @@ classdef Net < handle
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getNetDir( this )
-            dbDir = this.srcInOut.db.dstDir;
+            dbDir = this.inout.db.dstDir;
             dir = fullfile( dbDir, this.getNetDirName );
         end
         function dir = makeNetDir( this )
@@ -528,12 +528,12 @@ classdef Net < handle
         % Functions for average image I/O.
         function name = getImStatsName( this )
             name = sprintf( 'IS_OF_%s', ...
-                this.srcInOut.getName );
+                this.inout.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
         function dir = getImStatsDir( this )
-            dir = this.srcInOut.db.dstDir;
+            dir = this.inout.db.dstDir;
         end
         function dir = makeImStatsDir( this )
             dir = this.getImStatsDir;
