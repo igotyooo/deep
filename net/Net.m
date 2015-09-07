@@ -111,10 +111,10 @@ classdef Net < handle
                         [ energyVal, metricVal ] = ...
                             this.evaluate( net );
                     end;
-                    energyTr = sum( [ energyTr{ : } ] );
-                    metricTr = sum( [ metricTr{ : } ] );
-                    energyVal = sum( [ energyVal{ : } ] );
-                    metricVal = sum( [ metricVal{ : } ] );
+                    energyTr = sum( [ energyTr{ : } ], 2 );
+                    metricTr = sum( [ metricTr{ : } ], 2 );
+                    energyVal = sum( [ energyVal{ : } ], 2 );
+                    metricVal = sum( [ metricVal{ : } ], 2 );
                 end;
                 this.currentEpch = epch;
                 % Fetch network on cpu.
@@ -131,10 +131,10 @@ classdef Net < handle
                 batchSize = this.inout.getBatchSize;
                 numBchTr = this.inout.getNumBatchTr;
                 numBchVal = this.inout.getNumBatchVal;
-                this.eid2energyTr( end + 1 ) = energyTr / ( batchSize * numBchTr );
-                this.eid2metricTr( end + 1 ) = metricTr / ( batchSize * numBchTr );
-                this.eid2energyVal( end + 1 ) = energyVal / ( batchSize * numBchVal );
-                this.eid2metricVal( end + 1 ) = metricVal / ( batchSize * numBchVal );
+                this.eid2energyTr( :, end + 1 ) = energyTr / ( batchSize * numBchTr );
+                this.eid2metricTr( :, end + 1 ) = metricTr / ( batchSize * numBchTr );
+                this.eid2energyVal( :, end + 1 ) = energyVal / ( batchSize * numBchVal );
+                this.eid2metricVal( :, end + 1 ) = metricVal / ( batchSize * numBchVal );
                 % Save.
                 fprintf( '%s: Save net at epch %d.\n', ...
                     upper( mfilename ), epch );
@@ -218,7 +218,7 @@ classdef Net < handle
                 fprintf( '%s: Im stats loaded.\n', ...
                     upper( mfilename ) );
             catch
-                numBchTr = this.inout.numBchTr;
+                numBchTr = this.inout.getNumBatchTr;
                 averageImage = cell( numBchTr, 1 );
                 rgbMean = cell( numBchTr, 1 );
                 rgbCovariance = cell( numBchTr, 1 );
@@ -265,22 +265,10 @@ classdef Net < handle
             momentum = this.setting.momentum;
             batchSize = this.inout.getBatchSize;
             numBchTr = this.inout.getNumBatchTr;
-            energy = 0;
-            metric = 0;
+            numMetric = this.inout.getNumTsMetric;
+            energy = zeros( numMetric, 1 );
+            metric = zeros( numMetric, 1 );
             one = single( 1 );
-            % Reset momentum if the learning rate is changed.
-            % prevLearnRate = this.setting.learningRate( max( 1, epch - 1 ) );
-            % if learnRate ~= prevLearnRate,
-            %     fprintf('%s: Change learning rate to %f. Reset momentum.\n', ...
-            %         upper( mfilename ), learnRate );
-            %     for l = 1 : numel( net.layers ),
-            %         if ~isfield( net.layers{ l }, 'weights' ), continue; end;
-            %         net.layers{ l }.filtersMomentum = ...
-            %             0 * net.layers{ l }.filtersMomentum;
-            %         net.layers{ l }.biasesMomentum = ...
-            %             0 * net.layers{ l }.biasesMomentum;
-            %     end;
-            % end;
             % For each batch,
             res = [  ]; mmap = [  ];
             for b = 1 : numBchTr; btime = tic;
@@ -301,8 +289,10 @@ classdef Net < handle
                     'backPropDepth', +inf, ...
                     'sync', true ); % 'sync' makes things slow but on MATLAB 2014a it is necessary.
                 % Accumulate energy and task-specific evaluation metric.
+                % energy = energy + ...
+                %     sum( double( gather( res( end ).x ) ) ); % <- original code.
                 energy = energy + ...
-                    sum( double( gather( res( end ).x ) ) );
+                    double( gather( res( end ).x ) );
                 metric = metric + ...
                     this.inout.computeTsMetric( res, gts );
                 % Update w by gradients.
@@ -334,8 +324,9 @@ classdef Net < handle
             numEpch = numel( this.setting.learningRate );
             batchSize = this.inout.getBatchSize;
             numBchVal = this.inout.getNumBatchVal;
-            energy = 0;
-            metric = 0;
+            numMetric = this.inout.getNumTsMetric;
+            energy = zeros( numMetric, 1 );
+            metric = zeros( numMetric, 1 );
             % For each batch,
             res = [  ];
             for b = 1 : numBchVal; btime = tic;
@@ -356,8 +347,10 @@ classdef Net < handle
                     'backPropDepth', +inf, ...
                     'sync', true ); % 'sync' makes things slow but on MATLAB 2014a it is necessary.
                 % Accumulate energy and task-specific evaluation metric.
+                % energy = energy + ...
+                %     sum( double( gather( res( end ).x ) ) ); % <- original code.
                 energy = energy + ...
-                    sum( double( gather( res( end ).x ) ) );
+                    double( gather( res( end ).x ) );
                 metric = metric + ...
                     this.inout.computeTsMetric( res, gts );
                 % Print out the status.
@@ -384,35 +377,49 @@ classdef Net < handle
         end
         % Function for error plot.
         function h = showTrainInfoFig( this )
-            numEpch = numel( this.eid2energyTr );
+            numEpch = size( this.eid2energyTr, 2 );
+            numMetric = size( this.eid2energyTr, 1 );
             h = figure( 1 ); clf;
             % Plot energy.
             subplot( 1, 2, 1 );
-            semilogy( 1 : numEpch, ...
-                this.eid2energyTr, 'k.-' );
+            llist = {  };
+            for m = 1 : numMetric,
+                semilogy( 1 : numEpch, ...
+                    this.eid2energyTr( m, : ), 'k.-' );
+                llist{ end + 1 } = sprintf( 'Train%d', m );
+                hold on;
+                semilogy( 1 : numEpch, ...
+                    this.eid2energyVal( m, : ), 'b.-' );
+                llist{ end + 1 } = sprintf( 'Val%d', m );
+                hold on;
+            end;
             set( gca, 'yscale', 'linear' );
-            hold on;
-            semilogy( 1 : numEpch, ...
-                this.eid2energyVal, 'b.-' );
             xlabel( 'Epoch' ); ylabel( 'Energy' );
-            legend( { 'Train', 'Val' }, 'Location', 'Best' );
+            legend( llist, 'Location', 'Best' );
             grid on;
             % Plot task-specific evaluation metric.
             tsMetricName = this.inout.getTsMetricName;
             subplot( 1, 2, 2 );
-            plot( 1 : numEpch, ...
-                this.eid2metricTr, 'k.-' );
-            hold on;
-            plot( 1 : numEpch, ...
-                this.eid2metricVal, 'b.-' );
-            xlabel( 'Epoch' ); ylabel( tsMetricName );
-            legend( { 'Train', 'Val' }, 'Location', 'Best' );
+            llist = {  };
+            for m = 1 : numMetric,
+                plot( 1 : numEpch, ...
+                    this.eid2metricTr( m, : ), 'k.-' );
+                llist{ end + 1 } = sprintf( 'Train %s', tsMetricName{ m } );
+                hold on;
+                plot( 1 : numEpch, ...
+                    this.eid2metricVal( m, : ), 'b.-' );
+                llist{ end + 1 } = sprintf( 'Val %s', tsMetricName{ m } );
+                hold on;
+            end;
+            xlabel( 'Epoch' ); ylabel( 'Evaluation metric' );
+            legend( llist, 'Location', 'Best' );
             grid on;
             set( gcf, 'color', 'w' );
         end
         % Functions for report training.
         function [ title, mssg ] = writeTrainReport( this )
-            epch = length( this.eid2energyVal );
+            epch = size( this.eid2energyVal, 2 );
+            numMetric = size( this.eid2energyVal, 1 );
             tsMetricName = this.inout.getTsMetricName;
             title = sprintf( '%s: TRAINING REPORT AT EPOCH %d', ...
                 upper( mfilename ), epch );
@@ -425,13 +432,11 @@ classdef Net < handle
                 this.inout.getName );
             mssg{ end + 1 } = sprintf( 'NET: %s', ...
                 this.getNetDirName );
-            mssg{ end + 1 } = ...
-                sprintf( 'ENERGY: %.4f%', ...
-                this.eid2energyVal( end ) );
-            mssg{ end + 1 } = ...
-                sprintf( '%s: %.4f%', ...
-                upper( tsMetricName ), ...
-                this.eid2metricVal( end ) );
+            for m = 1 : numMetric,
+                mssg{ end + 1 } = sprintf( '%s: %.4f', ...
+                    upper( tsMetricName{ m } ), ...
+                    this.eid2metricVal( m, end ) );
+            end;
             mssg{ end + 1 } = ' ';
         end
         function reportTrainStatus...
