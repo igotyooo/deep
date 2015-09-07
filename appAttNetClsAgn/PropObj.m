@@ -85,20 +85,27 @@ classdef PropObj < handle
             end;
             if nargout,
                 % Compute each region score.
-                numOut = size( this.propNet.layers{ end - 1 }.weights{ 1 }, 4 );
-                numClass = this.db.getNumClass;
-                [ rid2score, rid2cid ] = ...
-                    max( rid2out, [  ], 1 );
-                if numOut == numClass + 1,
-                    rid2ok = rid2cid ~= numClass + 1;
-                elseif numOut == numClass + 2,
-                    rid2ok = rid2cid ~= ( numClass + 1 ) & rid2cid ~= ( numClass + 2 );
-                end;
-                rid2out = rid2out( :, rid2ok );
+                dimCls = this.propNet.layers{ end }.dimCls;
+                dimDir = this.propNet.layers{ end }.dimDir;
+                rid2outCls = rid2out( dimCls, : );
+                rid2outDir = rid2out( dimDir, : );
+                [ rid2scoreCls, rid2cidCls ] = ...
+                    max( rid2outCls, [  ], 1 );
+                [ rid2scoreDir, rid2cidDir ] = ...
+                    max( rid2outDir, [  ], 1 );
+                rid2okCls = rid2cidCls ~= ( numel( dimCls ) - 1 ) & ...
+                    rid2cidCls ~= numel( dimCls );
+                rid2okDir = rid2cidDir == 1;
+                rid2ok = rid2okCls & rid2okDir;
+                rid2outCls = rid2outCls( :, rid2ok );
+                rid2outDir = rid2outDir( :, rid2ok );
+                % rid2scoreCls = rid2scoreCls( rid2ok ) * 2 - sum( rid2outCls, 1 );
+                rid2scoreCls = rid2scoreCls( rid2ok ) - ...
+                    sum( rid2outCls( numel( dimCls ) - 1 : end, : ), 1 );
+                rid2scoreDir = rid2scoreDir( rid2ok ) * 2 - sum( rid2outDir, 1 );
+                rid2score = rid2scoreCls + rid2scoreDir;
+                rid2cid = rid2cidCls( rid2ok );
                 rid2tlbr = rid2tlbr( 1 : 4, rid2ok );
-                rid2cid = rid2cid( rid2ok );
-                rid2score = rid2score( rid2ok );
-                rid2score = rid2score * 2 - sum( rid2out, 1 );
                 % Merge.
                 overlap = this.settingPost.overlap;
                 ok = nms_iou( [ rid2tlbr; rid2score; ]', overlap );
@@ -116,7 +123,7 @@ classdef PropObj < handle
                 extractDenseActivations( ...
                 im, ...
                 this.propNet, ...
-                numel( this.propNet.layers ), ...
+                numel( this.propNet.layers ) - 1, ...
                 sid2size, ...
                 this.patchSide, ...
                 dilate );
