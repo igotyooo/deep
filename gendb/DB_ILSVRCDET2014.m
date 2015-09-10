@@ -92,7 +92,82 @@ function [  cid2name, ...
     fprintf( 'Done.\n' );
     fprintf( 'Compute class.\n' );
     [  cid2name, ~, oid2cid ] = unique( oid2name );
+    meta = load( fullfile( path.lib.ilsvrcDevKit, 'data/meta_det.mat' ) );
+    numMeta = numel( meta.synsets );
+    numClass = numel( cid2name );
+    mid2name = cell( numMeta, 1 );
+    for mid = 1 : numMeta,
+        cname = meta.synsets( mid ).name;
+        len = numel( cname );
+        idx = strfind( cname, ', ' );
+        if ~isempty( idx ),
+            sidx = [ 1, idx + 2 ];
+            eidx = [ idx - 1, len ];
+            wlen = eidx - sidx + 1;
+            [ ~, sel ] = min( wlen );
+            cname = cname( sidx( sel ) : eidx( sel ) );
+        end;
+        mid2name{ mid } = cname;
+    end;
+    mid2wnid = { meta.synsets.WNID }';
+    for cid = 1 : numClass,
+        cname = cid2name{ cid };
+        mid = ismember( mid2wnid, cname );
+        cid2name{ cid } = mid2name{ mid };
+    end;
     fprintf( 'Done.\n' );
+    % Reject images if defined as "part".
+    fprintf( 'Reject images if defined as "part".\n' );
+    numIm = numel( iid2impath );
+    iid2name = cell( numIm, 1 );
+    parfor iid = 1 : numIm,
+        [ ~, iid2name{ iid } ] = fileparts( iid2impath{ iid } );
+    end;
+    pid2path = dir( fullfile( path.lib.ilsvrcDevKit, 'data/det_lists/*_part_*' ) );
+    pid2path = fullfile( path.lib.ilsvrcDevKit, 'data/det_lists', { pid2path.name }' );
+    iid2ispart = false( numIm, 1 );
+    numPart = numel( pid2path );
+    for pid = 1 : numPart,
+        fp = fopen( pid2path{ pid }, 'r' );
+        imlist = textscan( fp, '%s' );
+        imlist = imlist{ : };
+        fclose( fp );
+        for l = 1 : numel( imlist ),
+            [ ~, partname ] = fileparts( imlist{ l } );
+            partid = ismember( iid2name, partname );
+            if sum( partid ) ~= 1, error( 'Error.\n' ); end;
+            iid2ispart( partid ) = true;
+        end;
+    end;
+    % iid2impath, iid2size, iid2setid, oid2cid, oid2iid, oid2bbox
+    newiid2iid = setdiff( ( 1 : numIm )', find( iid2ispart ) );
+    iid2newiid = zeros( numIm, 1 );
+    iid2newiid( newiid2iid ) = 1 : numel( newiid2iid );
+    iid2impath = iid2impath( newiid2iid );
+    iid2size = iid2size( :, newiid2iid );
+    iid2setid = iid2setid( newiid2iid );
+    newoid2oid = find( ~ismember( oid2iid, find( iid2ispart ) ) );
+    oid2cid = oid2cid( newoid2oid );
+    oid2iid = iid2newiid( oid2iid( newoid2oid ) );
+    oid2bbox = oid2bbox( :, newoid2oid );
+    fprintf( 'Done.\n' );
+    % Reject wrong bounding boxes.
+    oid2nr = oid2bbox( 3, : ) - oid2bbox( 1, : ) + 1;
+    oid2nc = oid2bbox( 4, : ) - oid2bbox( 2, : ) + 1;
+    oid2wrong = oid2nr <= 1 | oid2nc <= 1;
+    newoid2oid = find( ~oid2wrong );
+    oid2cid = oid2cid( newoid2oid );
+    oid2iid = oid2iid( newoid2oid );
+    oid2bbox = oid2bbox( :, newoid2oid );
+    % Reject too small bounding boxes.
+    % minObjRate = 0.002;
+    % iid2area = prod( iid2size, 1 );
+    % oid2imarea = iid2area( oid2iid );
+    % oid2small = ( oid2area ./ oid2imarea ) < minObjRate;
+    % oid = randsample( find( oid2small ), 1 );
+    % iid = oid2iid( oid );
+    % figure( 1 ); plottlbr( oid2bbox( :, oid2iid == iid ), iid2impath{ iid }, false, 'r' );
+    % figure( 2 ); plottlbr( oid2bbox( :, oid ), iid2impath{ iid }, false, 'r' );
     oid2cont = cell( size( oid2cid ) );
     oid2diff = false( size( oid2cid ) );
     % Data type conversion.
