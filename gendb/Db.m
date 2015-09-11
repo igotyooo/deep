@@ -124,6 +124,21 @@ classdef Db < handle
         function ismulti = isMutiLabel( this )
             ismulti = any( cellfun( @length, this.iid2cids ) ~= 1 );
         end
+        function teoids = getTrOids( this )
+            teoids = find( this.iid2setid( this.oid2iid ) == 1 );
+        end
+        function teoids = getTeOids( this )
+            teoids = find( this.iid2setid( this.oid2iid ) == 2 );
+        end
+        function numObj = getNumObj( this )
+            numObj = numel( this.oid2iid );
+        end
+        function numObj = getNumTrObj( this )
+            numObj = numel( this.getTrOids );
+        end
+        function numObj = getNumTeObj( this )
+            numObj = numel( this.getTeOids );
+        end
         function cid2idxs = getCid2idxs( this, idx2iid )
             idx2cids = this.iid2cids( idx2iid );
             idx2cids = idx2cids( : );
