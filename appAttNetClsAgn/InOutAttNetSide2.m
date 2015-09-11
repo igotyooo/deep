@@ -577,7 +577,8 @@ classdef InOutAttNetSide2 < handle
                     this.patchSide, ...
                     this.stride, ...
                     dilate );
-                rid2rect = tlbr2rect( rid2tlbr );
+                if isempty( rid2tlbr ), rid2rect = zeros( 5, 0 ); rid2tlbr = zeros( 5, 0 );
+                else rid2rect = tlbr2rect( rid2tlbr ); end;
                 rid2area = prod( rid2rect( 3 : 4, : ), 1 )';
                 oid2rect = tlbr2rect( oid2tlbr );
                 oid2area = prod( oid2rect( 3 : 4, : ), 1 )';
