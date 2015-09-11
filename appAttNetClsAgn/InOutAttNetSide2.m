@@ -473,6 +473,7 @@ classdef InOutAttNetSide2 < handle
                         sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
                     end;
                 end;
+                if sid == numSample, break; end;
                 % Sample positive regions - for various directions.
                 for n = 1 : numAnyDirectionSmaplePerObj,
                     if sid == numSample, break; end;
@@ -498,6 +499,7 @@ classdef InOutAttNetSide2 < handle
                         sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
                     end;
                 end;
+                if sid == numSample, break; end;
                 % Sample positive regions - for stop.
                 for n = 1 : numStopSmaplePerObj,
                     if sid == numSample, break; end;
@@ -518,6 +520,7 @@ classdef InOutAttNetSide2 < handle
                         sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
                     end;
                 end;
+                if sid == numSample, break; end;
                 % Sample semi-negative regions.
                 for n = 1 : numTruncatedSmaplePerObj,
                     if sid == numSample, break; end;
@@ -532,6 +535,7 @@ classdef InOutAttNetSide2 < handle
                         sid2gt( :, sid ) = [ truncIdCls; truncIdDir; ];
                     end;
                 end;
+                if sid == numSample, break; end;
                 % Sample negative regions.
                 for n = 1 : numBackgroundSmaplePerObj,
                     if sid == numSample, break; end;
@@ -550,6 +554,7 @@ classdef InOutAttNetSide2 < handle
                         sid2gt( :, sid ) = [ bgdIdCls; bgdIdDir; ];
                     end;
                 end;
+                if sid == numSample, break; end;
             end;
             if shuffleSequance,
                 sids = randperm( numSample )';
