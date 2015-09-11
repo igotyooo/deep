@@ -431,9 +431,13 @@ classdef InOutAttNetSide2 < handle
             rng( 'shuffle' );
             shuffleSequance = this.settingGeneral.shuffleSequance;
             batchSize = this.settingGeneral.batchSize;
+            numGoSmaplePerObj = this.settingGeneral.numGoSmaplePerObj;
+            numAnyDirectionSmaplePerObj = this.settingGeneral.numAnyDirectionSmaplePerObj;
+            numStopSmaplePerObj = this.settingGeneral.numStopSmaplePerObj;
+            numTruncatedSmaplePerObj = this.settingGeneral.numTruncatedSmaplePerObj;
+            numBackgroundSmaplePerObj = this.settingGeneral.numBackgroundSmaplePerObj;
             if setid == 1, subTsDb = this.tsDb.tr; else subTsDb = this.tsDb.val; end;
             numObj = numel( subTsDb.oid2iid );
-            % 1) A pos for proposal, 2) a pos for various direction, 3) a pos for stop, 4) a semi-neg, 5) and neg.
             numAugPerObj = this.getNumSamplePerObj;
             numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             truncIdCls = max( subTsDb.oid2cid ) + 1;
@@ -449,92 +453,102 @@ classdef InOutAttNetSide2 < handle
                 iter = iter + 1;
                 if iter > numObj, oid = ceil( numObj * rand ); else oid = oid + 1; end;
                 iid = subTsDb.oid2iid( oid );
-                % Sample a positive region - for initial proposal.
-                if sid == numSample, break; end;
-                dpid = 1;
-                flip = round( rand );
-                if flip,
-                    regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
-                else
-                    regns = subTsDb.oid2dpid2posregns{ oid }{ dpid };
-                end;
-                numRegn = size( regns, 2 );
-                if numRegn,
-                    ridx = ceil( rand * numRegn );
-                    sid = sid + 1;
-                    sid2iid( sid ) = iid;
-                    sid2tlbr( :, sid ) = regns( :, ridx );
-                    sid2flip( sid ) = flip;
-                    sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
-                end;
-                % Sample a positive region - for various directions.
-                if sid == numSample, break; end;
-                flip = round( rand );
-                if flip,
-                    dpid2posregns = subTsDb.oid2dpid2posregnsFlip{ oid };
-                else
-                    dpid2posregns = subTsDb.oid2dpid2posregns{ oid };
-                end;
-                dpid2ok = ~cellfun( @isempty, dpid2posregns );
-                dpid2ok( 1 ) = false;
-                dpid2ok( end ) = false;
-                if sum( dpid2ok ),
-                    dpid = find( dpid2ok );
-                    dpid = dpid( ceil( numel( dpid ) * rand ) );
-                    regns = dpid2posregns{ dpid };
+                % Sample positive regions - for initial proposal.
+                for n = 1 : numGoSmaplePerObj,
+                    if sid == numSample, break; end;
+                    dpid = 1;
+                    flip = round( rand );
+                    if flip,
+                        regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
+                    else
+                        regns = subTsDb.oid2dpid2posregns{ oid }{ dpid };
+                    end;
                     numRegn = size( regns, 2 );
-                    ridx = ceil( rand * numRegn );
-                    sid = sid + 1;
-                    sid2iid( sid ) = iid;
-                    sid2tlbr( :, sid ) = regns( :, ridx );
-                    sid2flip( sid ) = flip;
-                    sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
+                    if numRegn,
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = flip;
+                        sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
+                    end;
                 end;
-                % Sample a positive region - for stop.
-                if sid == numSample, break; end;
-                dpid = 2 * 2 * 2 * 2;
-                flip = round( rand );
-                if flip,
-                    regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
-                else
-                    regns = subTsDb.oid2dpid2posregns{ oid }{ dpid };
+                % Sample positive regions - for various directions.
+                for n = 1 : numAnyDirectionSmaplePerObj,
+                    if sid == numSample, break; end;
+                    flip = round( rand );
+                    if flip,
+                        dpid2posregns = subTsDb.oid2dpid2posregnsFlip{ oid };
+                    else
+                        dpid2posregns = subTsDb.oid2dpid2posregns{ oid };
+                    end;
+                    dpid2ok = ~cellfun( @isempty, dpid2posregns );
+                    dpid2ok( 1 ) = false;
+                    dpid2ok( end ) = false;
+                    if sum( dpid2ok ),
+                        dpid = find( dpid2ok );
+                        dpid = dpid( ceil( numel( dpid ) * rand ) );
+                        regns = dpid2posregns{ dpid };
+                        numRegn = size( regns, 2 );
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = flip;
+                        sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
+                    end;
                 end;
-                numRegn = size( regns, 2 );
-                if numRegn,
-                    ridx = ceil( rand * numRegn );
-                    sid = sid + 1;
-                    sid2iid( sid ) = iid;
-                    sid2tlbr( :, sid ) = regns( :, ridx );
-                    sid2flip( sid ) = flip;
-                    sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
-                end;
-                % Sample a semi-negative region.
-                if sid == numSample, break; end;
-                regns = subTsDb.oid2snegregns{ oid };
-                numRegn = size( regns, 2 );
-                if numRegn,
-                    ridx = ceil( rand * numRegn );
-                    sid = sid + 1;
-                    sid2iid( sid ) = iid;
-                    sid2tlbr( :, sid ) = regns( :, ridx );
-                    sid2flip( sid ) = round( rand );
-                    sid2gt( :, sid ) = [ truncIdCls; truncIdDir; ];
-                end;
-                % Sample a negative region.
-                if sid == numSample, break; end;
-                regns = subTsDb.iid2sid2negregns{ iid };
-                s2ok = ~cellfun( @isempty, regns );
-                if sum( s2ok ),
-                    s = find( s2ok );
-                    s = s( ceil( numel( s ) * rand ) );
-                    regns = regns{ s };
+                % Sample positive regions - for stop.
+                for n = 1 : numStopSmaplePerObj,
+                    if sid == numSample, break; end;
+                    dpid = 2 * 2 * 2 * 2;
+                    flip = round( rand );
+                    if flip,
+                        regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
+                    else
+                        regns = subTsDb.oid2dpid2posregns{ oid }{ dpid };
+                    end;
                     numRegn = size( regns, 2 );
-                    ridx = ceil( rand * numRegn );
-                    sid = sid + 1;
-                    sid2iid( sid ) = iid;
-                    sid2tlbr( :, sid ) = regns( :, ridx );
-                    sid2flip( sid ) = round( rand );
-                    sid2gt( :, sid ) = [ bgdIdCls; bgdIdDir; ];
+                    if numRegn,
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = flip;
+                        sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid ];
+                    end;
+                end;
+                % Sample semi-negative regions.
+                for n = 1 : numTruncatedSmaplePerObj,
+                    if sid == numSample, break; end;
+                    regns = subTsDb.oid2snegregns{ oid };
+                    numRegn = size( regns, 2 );
+                    if numRegn,
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = round( rand );
+                        sid2gt( :, sid ) = [ truncIdCls; truncIdDir; ];
+                    end;
+                end;
+                % Sample negative regions.
+                for n = 1 : numBackgroundSmaplePerObj,
+                    if sid == numSample, break; end;
+                    regns = subTsDb.iid2sid2negregns{ iid };
+                    s2ok = ~cellfun( @isempty, regns );
+                    if sum( s2ok ),
+                        s = find( s2ok );
+                        s = s( ceil( numel( s ) * rand ) );
+                        regns = regns{ s };
+                        numRegn = size( regns, 2 );
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = round( rand );
+                        sid2gt( :, sid ) = [ bgdIdCls; bgdIdDir; ];
+                    end;
                 end;
             end;
             if shuffleSequance,
