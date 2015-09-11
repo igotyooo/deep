@@ -49,6 +49,11 @@ classdef InOutAttNetSide2 < handle
             % Parameters to provide batches.
             this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.batchSize                       = 256;
+            this.settingGeneral.numGoSmaplePerObj               = 1;
+            this.settingGeneral.numAnyDirectionSmaplePerObj     = 1;
+            this.settingGeneral.numStopSmaplePerObj             = 1;
+            this.settingGeneral.numTruncatedSmaplePerObj        = 1;
+            this.settingGeneral.numBackgroundSmaplePerObj       = 1;
             this.settingGeneral.maxNumTrainingSamplePerEpoch    = 1000000;
             this.settingGeneral.maxNumValidationSamplePerEpoch  = 10000;
             % Apply user setting.
@@ -292,20 +297,31 @@ classdef InOutAttNetSide2 < handle
             batchSize = this.settingGeneral.batchSize;
         end
         function numBchTr = getNumBatchTr( this )
-            % 1) A pos for proposal, 2) a pos for various direction, 3) a pos for stop, 4) a semi-neg, 5) and neg.
-            numAugPerIm = 5; 
+            numAugPerObj = this.getNumSamplePerObj; 
             batchSize = this.settingGeneral.batchSize;
             numObj = numel( this.tsDb.tr.oid2iid );
-            numSample = ceil( numObj * numAugPerIm / batchSize ) * batchSize;
+            numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             numBchTr = numSample / batchSize;
         end
         function numBchVal = getNumBatchVal( this )
-            % 1) A pos for proposal, 2) a pos for various direction, 3) a pos for stop, 4) a semi-neg, 5) and neg.
-            numAugPerIm = 5; 
+            numAugPerObj = this.getNumSamplePerObj; 
             batchSize = this.settingGeneral.batchSize;
             numObj = numel( this.tsDb.val.oid2iid );
-            numSample = ceil( numObj * numAugPerIm / batchSize ) * batchSize;
+            numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             numBchVal = numSample / batchSize;
+        end
+        function numSample = getNumSamplePerObj( this )
+            % 1) A pos for proposal, 2) a pos for various direction, 3) a pos for stop, 4) a semi-neg, 5) and neg.
+            numGoSmaplePerObj = this.settingGeneral.numGoSmaplePerObj;
+            numAnyDirectionSmaplePerObj = this.settingGeneral.numAnyDirectionSmaplePerObj;
+            numStopSmaplePerObj = this.settingGeneral.numStopSmaplePerObj;
+            numTruncatedSmaplePerObj = this.settingGeneral.numTruncatedSmaplePerObj;
+            numBackgroundSmaplePerObj = this.settingGeneral.numBackgroundSmaplePerObj;
+            numSample = numGoSmaplePerObj + ...
+                numAnyDirectionSmaplePerObj + ...
+                numStopSmaplePerObj + ...
+                numTruncatedSmaplePerObj + ...
+                numBackgroundSmaplePerObj; 
         end
         function tsMetricName = getTsMetricName( this )
             tsMetricName = this.tsMetricName;
@@ -418,8 +434,8 @@ classdef InOutAttNetSide2 < handle
             if setid == 1, subTsDb = this.tsDb.tr; else subTsDb = this.tsDb.val; end;
             numObj = numel( subTsDb.oid2iid );
             % 1) A pos for proposal, 2) a pos for various direction, 3) a pos for stop, 4) a semi-neg, 5) and neg.
-            numAugPerIm = 5; 
-            numSample = ceil( numObj * numAugPerIm / batchSize ) * batchSize;
+            numAugPerObj = this.getNumSamplePerObj;
+            numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             truncIdCls = max( subTsDb.oid2cid ) + 1;
             truncIdDir = 2 * 2 * 2 * 2 + 1;
             bgdIdCls = truncIdCls + 1;
