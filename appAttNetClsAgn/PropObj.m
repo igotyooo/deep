@@ -1,7 +1,7 @@
 classdef PropObj < handle
     properties
         db;
-        propNet;
+        attNet;
         stride;
         patchSide;
         scales;
@@ -9,9 +9,9 @@ classdef PropObj < handle
         settingPost;
     end
     methods( Access = public )
-        function this = PropObj( db, propNet, settingMain, settingPost )
+        function this = PropObj( db, attNet, settingMain, settingPost )
             this.db = db;
-            this.propNet = propNet;
+            this.attNet = attNet;
             this.settingMain.numScaling = 24;
             this.settingMain.dilate = 1 / 4;
             this.settingMain.posIntOverRegnMoreThan = 1 / 3;
@@ -26,13 +26,13 @@ classdef PropObj < handle
             numScaling = this.settingMain.numScaling;
             posIntOverRegnMoreThan = this.settingMain.posIntOverRegnMoreThan;
             % Fetch net on GPU.
-            this.propNet.layers{ end }.type = 'softmax';
-            this.propNet = Net.fetchNetOnGpu( this.propNet, gpus );
+            this.attNet.layers{ end }.type = 'softmax';
+            this.attNet = Net.fetchNetOnGpu( this.attNet, gpus );
             % Determine stride and patch side.
             fprintf( '%s: Determine stride and patch side.\n', ...
                 upper( mfilename ) );
             [ this.patchSide, this.stride ] = ...
-                getNetProperties( this.propNet, numel( this.propNet.layers ) - 1 );
+                getNetProperties( this.attNet, numel( this.attNet.layers ) - 1 );
             % Determine scaling factors.
             fprintf( '%s: Determine scaling factors.\n', ...
                 upper( mfilename ) );
@@ -85,8 +85,8 @@ classdef PropObj < handle
             end;
             if nargout,
                 % Compute each region score.
-                dimCls = this.propNet.layers{ end }.dimCls;
-                dimDir = this.propNet.layers{ end }.dimDir;
+                dimCls = this.attNet.layers{ end }.dimCls;
+                dimDir = this.attNet.layers{ end }.dimDir;
                 rid2outCls = rid2out( dimCls, : );
                 rid2outDir = rid2out( dimDir, : );
                 [ rid2scoreCls, rid2cidCls ] = ...
@@ -122,8 +122,8 @@ classdef PropObj < handle
             rid2out = ...
                 extractDenseActivations( ...
                 im, ...
-                this.propNet, ...
-                numel( this.propNet.layers ) - 1, ...
+                this.attNet, ...
+                numel( this.attNet.layers ) - 1, ...
                 sid2size, ...
                 this.patchSide, ...
                 dilate );
@@ -142,7 +142,7 @@ classdef PropObj < handle
             name = sprintf( ...
                 'PROP_%s_OF_%s', ...
                 this.settingMain.changes, ...
-                this.propNet.name );
+                this.attNet.name );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
