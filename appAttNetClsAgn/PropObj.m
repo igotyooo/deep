@@ -5,26 +5,22 @@ classdef PropObj < handle
         stride;
         patchSide;
         scales;
-        settingMain;
-        settingPost;
+        setting;
     end
     methods( Access = public )
-        function this = PropObj( db, attNet, settingMain, settingPost )
+        function this = PropObj( db, attNet, setting )
             this.db = db;
             this.attNet = attNet;
-            this.settingMain.numScaling = 24;
-            this.settingMain.dilate = 1 / 4;
-            this.settingMain.posIntOverRegnMoreThan = 1 / 3;
-            this.settingPost.overlap = 0.7;
-            this.settingMain = setChanges...
-                ( this.settingMain, settingMain, upper( mfilename ) );
-            this.settingPost = setChanges...
-                ( this.settingPost, settingPost, upper( mfilename ) );
+            this.setting.numScaling = 24;
+            this.setting.dilate = 1 / 4;
+            this.setting.posIntOverRegnMoreThan = 1 / 3;
+            this.setting = setChanges...
+                ( this.setting, setting, upper( mfilename ) );
         end
         function init( this, gpus )
             % Set parameters.
-            numScaling = this.settingMain.numScaling;
-            posIntOverRegnMoreThan = this.settingMain.posIntOverRegnMoreThan;
+            numScaling = this.setting.numScaling;
+            posIntOverRegnMoreThan = this.setting.posIntOverRegnMoreThan;
             % Fetch net on GPU.
             this.attNet.layers{ end }.type = 'softmax';
             this.attNet = Net.fetchNetOnGpu( this.attNet, gpus );
@@ -78,7 +74,7 @@ classdef PropObj < handle
             catch
                 im = imread( this.db.iid2impath{ iid } );
                 [ rid2out, rid2tlbr ] = ...
-                    this.im2det0( im );
+                    this.im2det( im );
                 prop.rid2tlbr = rid2tlbr;
                 prop.rid2out = rid2out;
                 save( fpath, 'prop' );
@@ -106,16 +102,10 @@ classdef PropObj < handle
                 rid2score = rid2scoreCls + rid2scoreDir;
                 rid2cid = rid2cidCls( rid2ok );
                 rid2tlbr = rid2tlbr( 1 : 4, rid2ok );
-                % Merge.
-                overlap = this.settingPost.overlap;
-                ok = nms_iou( [ rid2tlbr; rid2score; ]', overlap );
-                rid2tlbr = rid2tlbr( :, ok );
-                rid2score = rid2score( :, ok );
-                rid2cid = rid2cid( ok );
             end;
         end
-        function [ rid2out, rid2tlbr ] = im2det0( this, im )
-            dilate = this.settingMain.dilate;
+        function [ rid2out, rid2tlbr ] = im2det( this, im )
+            dilate = this.setting.dilate;
             [ r, c, ~ ] = size( im );
             imSize0 = [ r; c; ];
             sid2size = round( bsxfun( @times, this.scales, imSize0 ) );
@@ -141,7 +131,7 @@ classdef PropObj < handle
         function name = getName( this )
             name = sprintf( ...
                 'PROP_%s_OF_%s', ...
-                this.settingMain.changes, ...
+                this.setting.changes, ...
                 this.attNet.name );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
