@@ -60,7 +60,7 @@ classdef PropObj < handle
             cummt = 0;
             for iidx = 1 : numIm; itime = tic;
                 iid = iids( iidx );
-                this.iid2prop( iid );
+                this.iid2det( iid );
                 cummt = cummt + toc( itime );
                 fprintf( '%s: ', upper( mfilename ) );
                 disploop( numIm, iidx, ...
@@ -68,7 +68,7 @@ classdef PropObj < handle
             end;
         end
         function [ rid2tlbr, rid2score, rid2cid ] = ...
-                iid2prop( this, iid )
+                iid2det( this, iid )
             % Initial guess.
             fpath = this.getPath( iid );
             try
@@ -78,7 +78,7 @@ classdef PropObj < handle
             catch
                 im = imread( this.db.iid2impath{ iid } );
                 [ rid2out, rid2tlbr ] = ...
-                    this.im2prop0( im );
+                    this.im2det0( im );
                 prop.rid2tlbr = rid2tlbr;
                 prop.rid2out = rid2out;
                 save( fpath, 'prop' );
@@ -114,7 +114,7 @@ classdef PropObj < handle
                 rid2cid = rid2cid( ok );
             end;
         end
-        function [ rid2out, rid2tlbr ] = im2prop0( this, im )
+        function [ rid2out, rid2tlbr ] = im2det0( this, im )
             dilate = this.settingMain.dilate;
             [ r, c, ~ ] = size( im );
             imSize0 = [ r; c; ];
