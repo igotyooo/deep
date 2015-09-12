@@ -215,7 +215,7 @@ classdef InOutAttNetSide2 < handle
             initBiasLearningRate = 2;
             filterWeightDecay = 1;
             biasWeightDecay = 0;
-            dstSide = 227;
+            dstSide = 219;
             dstCh = 3;
             % Load pre-trained net.
             srcNet = load( preTrainedNetPath );
