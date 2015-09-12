@@ -1,4 +1,5 @@
 function plottlbr( bid2tlbr, im, wait, color, cnames )
+    if isempty( bid2tlbr ), imshow( im ); return; end;
     if nargin < 4, color = 'c'; end;
     if ischar( im ), im = imread( im ); end;
     bid2tlbr = bid2tlbr( 1 : 4, : );
