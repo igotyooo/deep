@@ -37,15 +37,25 @@ classdef PropObj < handle
             [ this.patchSide, this.stride ] = ...
                 getNetProperties( this.attNet, numel( this.attNet.layers ) - 1 );
             % Determine scaling factors.
-            fprintf( '%s: Determine scaling factors.\n', ...
-                upper( mfilename ) );
-            oid2tlbr = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == 1 );
-            referenceSide = this.patchSide * sqrt( posIntOverRegnMoreThan );
-            [ scalesRow, scalesCol ] = determineImageScaling...
-                ( oid2tlbr, numScaling, referenceSide, true );
-            this.scales = [ scalesRow, scalesCol ]';
-            fprintf( '%s: Done.\n', ...
-                upper( mfilename ) );
+            % Determine scaling factors.
+            fpath = this.getScaleFactorPath;
+            try
+                fprintf( '%s: Try to load scaling factors.\n', upper( mfilename ) );
+                data = load( fpath );
+                this.scales = data.data.scales;
+            catch
+                fprintf( '%s: Determine scaling factors.\n', ...
+                    upper( mfilename ) );
+                oid2tlbr = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == 1 );
+                referenceSide = this.patchSide * sqrt( posIntOverRegnMoreThan );
+                [ scalesRow, scalesCol ] = determineImageScaling...
+                    ( oid2tlbr, numScaling, referenceSide, true );
+                data.scales = [ scalesRow, scalesCol ]';
+                fprintf( '%s: Done.\n', upper( mfilename ) );
+                save( fpath, 'data' );
+                this.scales = data.scales;
+            end;
+            fprintf( '%s: Done.\n', upper( mfilename ) );
         end
         function propObj( this )
             iids = this.db.getTeiids;
@@ -200,6 +210,23 @@ classdef PropObj < handle
                 ( 'ID%06d.mat', iid );
             fpath = fullfile...
                 ( this.getDir, fname );
+        end
+        function name = getScaleFactorName( this )
+            name = sprintf( ...
+                'SFTE_OF_%s', this.db.getName );
+            name( strfind( name, '__' ) ) = '';
+            if name( end ) == '_', name( end ) = ''; end;
+        end
+        function dir = getScaleFactorDir( this )
+            dir = this.db.getDir;
+        end
+        function dir = makeScaleFactorDir( this )
+            dir = this.getScaleFactorDir;
+            if ~exist( dir, 'dir' ), mkdir( dir ); end;
+        end
+        function path = getScaleFactorPath( this )
+            fname = strcat( this.getScaleFactorName, '.mat' );
+            path = fullfile( this.getScaleFactorDir, fname );
         end
     end
 end
