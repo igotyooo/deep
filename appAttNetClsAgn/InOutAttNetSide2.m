@@ -782,8 +782,9 @@ classdef InOutAttNetSide2 < handle
             path = fullfile( this.getRgbMeanDir, fname );
         end
         function name = getScaleFactorName( this )
+            numScaling = this.settingTsDb.numScaling;
             name = sprintf( ...
-                'SF_OF_%s', this.db.getName );
+                'SFTR_N%03d_OF_%s', numScaling, this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end

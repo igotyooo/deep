@@ -212,8 +212,9 @@ classdef PropObj < handle
                 ( this.getDir, fname );
         end
         function name = getScaleFactorName( this )
+            numScaling = this.settingMain.numScaling;
             name = sprintf( ...
-                'SFTE_OF_%s', this.db.getName );
+                'SFTE_N%03d_OF_%s', numScaling, this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
