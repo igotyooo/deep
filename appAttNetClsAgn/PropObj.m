@@ -148,6 +148,28 @@ classdef PropObj < handle
             if size( rid2out, 2 ) ~= size( rid2tlbr, 2 ),
                 error( 'Inconsistent number of regions.\n' ); end;
         end
+        function demo( this, fid, wait, iid )
+            if nargin < 4,
+                iid = this.db.getTeiids;
+                iid = randsample( iid', 1 );
+            end;
+            im = imread( this.db.iid2impath{ iid } );
+            [ rid2tlbr, rid2score, rid2cid ] = this.iid2det( iid );
+            figure( fid );
+            set( gcf, 'color', 'w' );
+            if wait,
+                for rid = 1 : numel( rid2score ),
+                    name = sprintf( '%s, %.2f', ...
+                        this.db.cid2name{ rid2cid( rid ) }, rid2score( rid ) );
+                    plottlbr( rid2tlbr( :, rid ), im, false, 'r', { name } ); 
+                    title( sprintf( 'Object proposal. (IID%06d)', iid ) );
+                    waitforbuttonpress;
+                end;
+            else
+                plottlbr( rid2tlbr, im, false, { 'r'; 'g'; 'b'; 'y' } );
+                title( sprintf( 'Object proposal. (IID%06d)', iid ) );
+            end;
+        end
         function [ rid2tlbr, rid2score, rid2cid ] = ...
                 merge( this, rid2tlbr, rid2score, rid2cid )
             mergingOverlap = this.settingPost.mergingOverlap;
