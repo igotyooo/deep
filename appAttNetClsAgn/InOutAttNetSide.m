@@ -49,6 +49,11 @@ classdef InOutAttNetSide < handle
             % Parameters to provide batches.
             this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.batchSize                       = 256;
+            this.settingGeneral.numGoSmaplePerObj               = 1;
+            this.settingGeneral.numAnyDirectionSmaplePerObj     = 1;
+            this.settingGeneral.numStopSmaplePerObj             = 1;
+            this.settingGeneral.numTruncatedSmaplePerObj        = 1;
+            this.settingGeneral.numBackgroundSmaplePerObj       = 1;
             % Apply user setting.
             this.settingTsDb = setChanges...
                 ( this.settingTsDb, settingTsDb, upper( mfilename ) );
@@ -208,7 +213,7 @@ classdef InOutAttNetSide < handle
             initBiasLearningRate = 2;
             filterWeightDecay = 1;
             biasWeightDecay = 0;
-            dstSide = 227;
+            dstSide = 219;
             dstCh = 3;
             % Load pre-trained net.
             srcNet = load( preTrainedNetPath );
@@ -281,16 +286,31 @@ classdef InOutAttNetSide < handle
             batchSize = this.settingGeneral.batchSize;
         end
         function numBchTr = getNumBatchTr( this )
+            numAugPerObj = this.getNumSamplePerObj; 
             batchSize = this.settingGeneral.batchSize;
             numObj = numel( this.tsDb.tr.oid2iid );
-            numSample = ceil( numObj * 3 / batchSize ) * batchSize;
+            numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             numBchTr = numSample / batchSize;
         end
         function numBchVal = getNumBatchVal( this )
+            numAugPerObj = this.getNumSamplePerObj; 
             batchSize = this.settingGeneral.batchSize;
             numObj = numel( this.tsDb.val.oid2iid );
-            numSample = ceil( numObj * 3 / batchSize ) * batchSize;
+            numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             numBchVal = numSample / batchSize;
+        end
+        function numSample = getNumSamplePerObj( this )
+            % 1) A pos for proposal, 2) a pos for various direction, 3) a pos for stop, 4) a semi-neg, 5) and neg.
+            numGoSmaplePerObj = this.settingGeneral.numGoSmaplePerObj;
+            numAnyDirectionSmaplePerObj = this.settingGeneral.numAnyDirectionSmaplePerObj;
+            numStopSmaplePerObj = this.settingGeneral.numStopSmaplePerObj;
+            numTruncatedSmaplePerObj = this.settingGeneral.numTruncatedSmaplePerObj;
+            numBackgroundSmaplePerObj = this.settingGeneral.numBackgroundSmaplePerObj;
+            numSample = numGoSmaplePerObj + ...
+                numAnyDirectionSmaplePerObj + ...
+                numStopSmaplePerObj + ...
+                numTruncatedSmaplePerObj + ...
+                numBackgroundSmaplePerObj; 
         end
         function tsMetricName = getTsMetricName( this )
             tsMetricName = this.tsMetricName;
@@ -419,9 +439,15 @@ classdef InOutAttNetSide < handle
             rng( 'shuffle' );
             shuffleSequance = this.settingGeneral.shuffleSequance;
             batchSize = this.settingGeneral.batchSize;
+            numGoSmaplePerObj = this.settingGeneral.numGoSmaplePerObj;
+            numAnyDirectionSmaplePerObj = this.settingGeneral.numAnyDirectionSmaplePerObj;
+            numStopSmaplePerObj = this.settingGeneral.numStopSmaplePerObj;
+            numTruncatedSmaplePerObj = this.settingGeneral.numTruncatedSmaplePerObj;
+            numBackgroundSmaplePerObj = this.settingGeneral.numBackgroundSmaplePerObj;
             if setid == 1, subTsDb = this.tsDb.tr; else subTsDb = this.tsDb.val; end;
             numObj = numel( subTsDb.oid2iid );
-            numSample = ceil( numObj * 3 / batchSize ) * batchSize;
+            numAugPerObj = this.getNumSamplePerObj;
+            numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             trunkClsId = max( subTsDb.oid2cid ) + 1;
             bgdClsId = trunkClsId + 1;
             dpid2dp = this.directions.dpid2dp;
@@ -435,55 +461,108 @@ classdef InOutAttNetSide < handle
                 iter = iter + 1;
                 if iter > numObj, oid = ceil( numObj * rand ); else oid = oid + 1; end;
                 iid = subTsDb.oid2iid( oid );
-                % Sample a positive region.
-                if sid == numSample, break; end;
-                flip = round( rand );
-                if flip,
-                    dpid2posregns = subTsDb.oid2dpid2posregnsFlip{ oid };
-                else
-                    dpid2posregns = subTsDb.oid2dpid2posregns{ oid };
-                end;
-                dpid2ok = ~cellfun( @isempty, dpid2posregns );
-                if sum( dpid2ok ),
-                    dpid = find( dpid2ok );
-                    dpid = dpid( ceil( numel( dpid ) * rand ) );
-                    regns = dpid2posregns{ dpid };
+                % Sample positive regions - for initial proposal.
+                for n = 1 : numGoSmaplePerObj,
+                    if sid == numSample, break; end;
+                    dpid = 1;
+                    flip = round( rand );
+                    if flip,
+                        regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
+                    else
+                        regns = subTsDb.oid2dpid2posregns{ oid }{ dpid };
+                    end;
                     numRegn = size( regns, 2 );
-                    ridx = ceil( rand * numRegn );
-                    sid = sid + 1;
-                    sid2iid( sid ) = iid;
-                    sid2tlbr( :, sid ) = regns( :, ridx );
-                    sid2flip( sid ) = flip;
-                    sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid2dp( :, dpid ) ];
+                    if numRegn,
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = flip;
+                        sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid2dp( :, dpid ) ];
+                    end;
                 end;
-                % Sample a semi-negative region.
                 if sid == numSample, break; end;
-                regns = subTsDb.oid2snegregns{ oid };
-                numRegn = size( regns, 2 );
-                if numRegn,
-                    ridx = ceil( rand * numRegn );
-                    sid = sid + 1;
-                    sid2iid( sid ) = iid;
-                    sid2tlbr( :, sid ) = regns( :, ridx );
-                    sid2flip( sid ) = round( rand );
-                    sid2gt( :, sid ) = [ trunkClsId; zeros( pairSize, 1 ) ];
+                % Sample positive regions - for various directions.
+                for n = 1 : numAnyDirectionSmaplePerObj,
+                    if sid == numSample, break; end;
+                    flip = round( rand );
+                    if flip,
+                        dpid2posregns = subTsDb.oid2dpid2posregnsFlip{ oid };
+                    else
+                        dpid2posregns = subTsDb.oid2dpid2posregns{ oid };
+                    end;
+                    dpid2ok = ~cellfun( @isempty, dpid2posregns );
+                    dpid2ok( 1 ) = false;
+                    dpid2ok( end ) = false;
+                    if sum( dpid2ok ),
+                        dpid = find( dpid2ok );
+                        dpid = dpid( ceil( numel( dpid ) * rand ) );
+                        regns = dpid2posregns{ dpid };
+                        numRegn = size( regns, 2 );
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = flip;
+                        sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid2dp( :, dpid ) ];
+                    end;
                 end;
-                % Sample a negative region.
                 if sid == numSample, break; end;
-                regns = subTsDb.iid2sid2negregns{ iid };
-                s2ok = ~cellfun( @isempty, regns );
-                if sum( s2ok ),
-                    s = find( s2ok );
-                    s = s( ceil( numel( s ) * rand ) );
-                    regns = regns{ s };
+                % Sample positive regions - for stop.
+                for n = 1 : numStopSmaplePerObj,
+                    if sid == numSample, break; end;
+                    dpid = 2 * 2 * 2 * 2;
+                    flip = round( rand );
+                    if flip,
+                        regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
+                    else
+                        regns = subTsDb.oid2dpid2posregns{ oid }{ dpid };
+                    end;
                     numRegn = size( regns, 2 );
-                    ridx = ceil( rand * numRegn );
-                    sid = sid + 1;
-                    sid2iid( sid ) = iid;
-                    sid2tlbr( :, sid ) = regns( :, ridx );
-                    sid2flip( sid ) = round( rand );
-                    sid2gt( :, sid ) = [ bgdClsId; zeros( pairSize, 1 ) ];
+                    if numRegn,
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = flip;
+                        sid2gt( :, sid ) = [ subTsDb.oid2cid( oid ); dpid2dp( :, dpid ) ];
+                    end;
                 end;
+                if sid == numSample, break; end;
+                % Sample semi-negative regions.
+                for n = 1 : numTruncatedSmaplePerObj,
+                    if sid == numSample, break; end;
+                    regns = subTsDb.oid2snegregns{ oid };
+                    numRegn = size( regns, 2 );
+                    if numRegn,
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = round( rand );
+                        sid2gt( :, sid ) = [ truncIdCls; zeros( pairSize, 1 ) ];
+                    end;
+                end;
+                if sid == numSample, break; end;
+                % Sample negative regions.
+                for n = 1 : numBackgroundSmaplePerObj,
+                    if sid == numSample, break; end;
+                    regns = subTsDb.iid2sid2negregns{ iid };
+                    s2ok = ~cellfun( @isempty, regns );
+                    if sum( s2ok ),
+                        s = find( s2ok );
+                        s = s( ceil( numel( s ) * rand ) );
+                        regns = regns{ s };
+                        numRegn = size( regns, 2 );
+                        ridx = ceil( rand * numRegn );
+                        sid = sid + 1;
+                        sid2iid( sid ) = iid;
+                        sid2tlbr( :, sid ) = regns( :, ridx );
+                        sid2flip( sid ) = round( rand );
+                        sid2gt( :, sid ) = [ bgdIdCls; zeros( pairSize, 1 ) ];
+                    end;
+                end;
+                if sid == numSample, break; end;
             end;
             if shuffleSequance,
                 sids = randperm( numSample )';
@@ -541,7 +620,8 @@ classdef InOutAttNetSide < handle
                     this.patchSide, ...
                     this.stride, ...
                     dilate );
-                rid2rect = tlbr2rect( rid2tlbr );
+                if isempty( rid2tlbr ), rid2rect = zeros( 5, 0 ); rid2tlbr = zeros( 5, 0 );
+                else rid2rect = tlbr2rect( rid2tlbr ); end;
                 rid2area = prod( rid2rect( 3 : 4, : ), 1 )';
                 oid2rect = tlbr2rect( oid2tlbr );
                 oid2area = prod( oid2rect( 3 : 4, : ), 1 )';
@@ -710,8 +790,9 @@ classdef InOutAttNetSide < handle
             path = fullfile( this.getRgbMeanDir, fname );
         end
         function name = getScaleFactorName( this )
+            numScaling = this.settingTsDb.numScaling;
             name = sprintf( ...
-                'SF_OF_%s', this.db.getName );
+                'SFTR_N%03d_OF_%s', numScaling, this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
