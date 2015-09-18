@@ -30,15 +30,10 @@ classdef InOutAttNetSide < handle
             this.settingTsDb.directionVectorMagnitude           = 10;       % pixcels.
             this.settingTsDb.numMaxRegionPerDirectionPair       = 16;
             % Parameters for task specific db: positive mining.
-            this.settingTsDb.posMinMargin                       = 0.1;
             this.settingTsDb.posIntOverRegnMoreThan             = 1 / 4;    % A target object should be large enough.
             this.settingTsDb.posIntOverTarObjMoreThan           = 0.99;     % A target object should be fully-included.
-            this.settingTsDb.posIntOverSubObjMoreThan           = 0.7;      % A sub-object should be majorly-included.
-            this.settingTsDb.posIntMajorityMoreThan             = 2;        % A target object should large enough w.r.t. the sub-objects.
-            % Parameters for task specific db: semi-negative mining.
-            this.settingTsDb.snegIntOverRegnMoreThan            = 1 / 36;	% A sub-object should not be too small.
-            this.settingTsDb.snegIntOverObjMoreThan             = 0.3;      % The region is truncating the target object.
-            this.settingTsDb.snegIntOverObjLessThan             = 0.7;      % The region is truncating the target object.
+            this.settingTsDb.posIntOverSubObjMoreThan           = 0.7;      % A sub-object should be majorly-included. 
+            this.settingTsDb.posIntMajorityMoreThan             = 2;        % A target object should large enough w.r.t. the sub-objects. %%%%%%%%%%%%%%%%%%%%% Seems too large.
             % Parameters for task specific db: negative mining.
             this.settingTsDb.negIntOverObjLessThan              = 0.1;      % Very small overlap is allowed for background region.
             % Parameters for task specific net.
@@ -52,7 +47,6 @@ classdef InOutAttNetSide < handle
             this.settingGeneral.numGoSmaplePerObj               = 1;
             this.settingGeneral.numAnyDirectionSmaplePerObj     = 1;
             this.settingGeneral.numStopSmaplePerObj             = 1;
-            this.settingGeneral.numTruncatedSmaplePerObj        = 1;
             this.settingGeneral.numBackgroundSmaplePerObj       = 1;
             % Apply user setting.
             this.settingTsDb = setChanges...
@@ -154,6 +148,48 @@ classdef InOutAttNetSide < handle
                     upper( mfilename ) );
             end;
         end
+        function demo( this, fid, setid )
+            if setid == 1,
+                [ ims, gts, iids ] = this.provdBchTr;
+                tsdb = this.tsDb.tr;
+            else
+                [ ims, gts, iids ] = this.provdBchVal;
+                tsdb = this.tsDb.val;
+            end;
+            numCls = this.db.getNumClass;
+            bsize = this.settingGeneral.batchSize;
+            figure( fid );
+            set( gcf, 'color', 'w' );
+            for s = 1 : bsize,
+                im = ims( :, :, :, s );
+                gt = gts( :, :, :, s );
+                gt = gt( : );
+                gtCls = gt( 1 );
+                gtDir = gt( 2 : end );
+                im = uint8( bsxfun( @plus, im, this.rgbMean ) );
+                if gtCls <= numCls,
+                    cname = this.db.cid2name{ gtCls };
+                elseif gtCls == numCls + 1,
+                    cname = 'bgd';
+                end;
+                if sum( gtDir ),
+                    dname = num2str( gtDir' );
+                    dname( dname == ' ' ) = '';
+                    dname( dname == '1' ) = 'g';
+                    dname( dname == '2' ) = 's';
+                else 
+                    dname = 'bgd';
+                end;
+                [ ~, iid ] = fileparts( tsdb.iid2impath{ iids( s ) } );
+                iid = str2double( iid );
+                subplot( 1, 2, 1 );
+                plottlbr( this.db.oid2bbox( :, this.db.iid2oids{ iid } ), this.db.iid2impath{ iid }, false, 'r' );
+                title( 'Ground-truth' );
+                subplot( 1, 2, 2 );
+                imshow( im ); title( sprintf( '%s, %s (%d/%d)', cname, dname, s, bsize ) );
+                waitforbuttonpress;
+            end;
+        end;
         % Majorly used in net. Provide a tr/val batch of I/O pairs.
         function [ ims, gts, sid2iid ] = provdBchTr( this )
             batchSize = this.settingGeneral.batchSize;
@@ -236,7 +272,7 @@ classdef InOutAttNetSide < handle
             end
             % Initialize the output layer.
             filterChannel = size( layers{ end - 3 }.weights{ 1 }, 4 ); 
-            numOutDimCls = numel( this.db.cid2name ) + 2;
+            numOutDimCls = numel( this.db.cid2name ) + 1;
             numOutDim = numOutDimCls + 2 + 2 + 2 + 2;
             weight = 0.01 * randn( 1, 1, filterChannel, numOutDim, 'single' );
             bias = zeros( 1, numOutDim, 'single' );
@@ -268,16 +304,15 @@ classdef InOutAttNetSide < handle
             net.normalization.imageSize = [ dstSide, dstSide, dstCh ];
             net.normalization.interpolation = 'bicubic';
             net.classes.name = this.db.cid2name;
-            net.classes.name{ end + 1 }   = 'truncating';
-            net.classes.name{ end + 1 }   = 'background';
-            net.classes.name{ end + 1 }   = 'top: go';
-            net.classes.name{ end + 1 }   = 'top: stop';
-            net.classes.name{ end + 1 }   = 'left: go';
-            net.classes.name{ end + 1 }   = 'left: stop';
-            net.classes.name{ end + 1 }   = 'bottom: go';
-            net.classes.name{ end + 1 }   = 'bottom: stop';
-            net.classes.name{ end + 1 }   = 'right: go';
-            net.classes.name{ end + 1 }   = 'right: stop';
+            net.classes.name{ end + 1 } = 'background';
+            net.classes.name{ end + 1 } = 'top: go';
+            net.classes.name{ end + 1 } = 'top: stop';
+            net.classes.name{ end + 1 } = 'left: go';
+            net.classes.name{ end + 1 } = 'left: stop';
+            net.classes.name{ end + 1 } = 'bottom: go';
+            net.classes.name{ end + 1 } = 'bottom: stop';
+            net.classes.name{ end + 1 } = 'right: go';
+            net.classes.name{ end + 1 } = 'right: stop';
             net.classes.description = net.classes.name;
             netName = this.getTsNetName;
         end
@@ -300,16 +335,14 @@ classdef InOutAttNetSide < handle
             numBchVal = numSample / batchSize;
         end
         function numSample = getNumSamplePerObj( this )
-            % 1) A pos for proposal, 2) a pos for various direction, 3) a pos for stop, 4) a semi-neg, 5) and neg.
+            % 1) A pos for proposal, 2) a pos for various direction, 3) a pos for stop, 4) and neg.
             numGoSmaplePerObj = this.settingGeneral.numGoSmaplePerObj;
             numAnyDirectionSmaplePerObj = this.settingGeneral.numAnyDirectionSmaplePerObj;
             numStopSmaplePerObj = this.settingGeneral.numStopSmaplePerObj;
-            numTruncatedSmaplePerObj = this.settingGeneral.numTruncatedSmaplePerObj;
             numBackgroundSmaplePerObj = this.settingGeneral.numBackgroundSmaplePerObj;
             numSample = numGoSmaplePerObj + ...
                 numAnyDirectionSmaplePerObj + ...
                 numStopSmaplePerObj + ...
-                numTruncatedSmaplePerObj + ...
                 numBackgroundSmaplePerObj; 
         end
         function tsMetricName = getTsMetricName( this )
@@ -322,7 +355,7 @@ classdef InOutAttNetSide < handle
         % For this target application, object detection, 
         % the metric is top-1 accuracy.
         function tsMetric = computeTsMetric( this, res, gts )
-            numOutDimCls = numel( this.db.cid2name ) + 2;
+            numOutDimCls = numel( this.db.cid2name ) + 1;
             dimCls = 1 : numOutDimCls;
             dimDirT = numOutDimCls + 0 + ( 1 : 2 );
             dimDirL = numOutDimCls + 2 + ( 1 : 2 );
@@ -442,14 +475,12 @@ classdef InOutAttNetSide < handle
             numGoSmaplePerObj = this.settingGeneral.numGoSmaplePerObj;
             numAnyDirectionSmaplePerObj = this.settingGeneral.numAnyDirectionSmaplePerObj;
             numStopSmaplePerObj = this.settingGeneral.numStopSmaplePerObj;
-            numTruncatedSmaplePerObj = this.settingGeneral.numTruncatedSmaplePerObj;
             numBackgroundSmaplePerObj = this.settingGeneral.numBackgroundSmaplePerObj;
             if setid == 1, subTsDb = this.tsDb.tr; else subTsDb = this.tsDb.val; end;
             numObj = numel( subTsDb.oid2iid );
             numAugPerObj = this.getNumSamplePerObj;
             numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
-            trunkClsId = max( subTsDb.oid2cid ) + 1;
-            bgdClsId = trunkClsId + 1;
+            bgdClsId = max( subTsDb.oid2cid ) + 1;
             dpid2dp = this.directions.dpid2dp;
             pairSize = size( dpid2dp, 1 );
             sid2iid = zeros( numSample, 1, 'single' );
@@ -529,21 +560,6 @@ classdef InOutAttNetSide < handle
                     end;
                 end;
                 if sid == numSample, break; end;
-                % Sample semi-negative regions.
-                for n = 1 : numTruncatedSmaplePerObj,
-                    if sid == numSample, break; end;
-                    regns = subTsDb.oid2snegregns{ oid };
-                    numRegn = size( regns, 2 );
-                    if numRegn,
-                        ridx = ceil( rand * numRegn );
-                        sid = sid + 1;
-                        sid2iid( sid ) = iid;
-                        sid2tlbr( :, sid ) = regns( :, ridx );
-                        sid2flip( sid ) = round( rand );
-                        sid2gt( :, sid ) = [ truncIdCls; zeros( pairSize, 1 ) ];
-                    end;
-                end;
-                if sid == numSample, break; end;
                 % Sample negative regions.
                 for n = 1 : numBackgroundSmaplePerObj,
                     if sid == numSample, break; end;
@@ -559,7 +575,7 @@ classdef InOutAttNetSide < handle
                         sid2iid( sid ) = iid;
                         sid2tlbr( :, sid ) = regns( :, ridx );
                         sid2flip( sid ) = round( rand );
-                        sid2gt( :, sid ) = [ bgdIdCls; zeros( pairSize, 1 ) ];
+                        sid2gt( :, sid ) = [ bgdClsId; zeros( pairSize, 1 ) ];
                     end;
                 end;
                 if sid == numSample, break; end;
@@ -578,17 +594,12 @@ classdef InOutAttNetSide < handle
             dilate = this.settingTsDb.dilate;
             domainWarp = [ this.patchSide; this.patchSide; ];
             % Parameters for positive mining.
-            posMinMargin = this.settingTsDb.posMinMargin;
             posIntOverRegnMoreThan = this.settingTsDb.posIntOverRegnMoreThan;       % A target object should be large enough.
             posIntOverTarObjMoreThan = this.settingTsDb.posIntOverTarObjMoreThan;   % A target object should be fully-included.
             posIntOverSubObjMoreThan = this.settingTsDb.posIntOverSubObjMoreThan;   % A sub-object should be majorly-included.
             posIntMajorityMoreThan = this.settingTsDb.posIntMajorityMoreThan;       % A target object should large enough w.r.t. the sub-objects.
             directionVectorMagnitude = this.settingTsDb.directionVectorMagnitude;
             numMaxRegionPerDirectionPair = this.settingTsDb.numMaxRegionPerDirectionPair;
-            % Parameters for semi-negative mining.
-            snegIntOverRegnMoreThan = this.settingTsDb.snegIntOverRegnMoreThan;     % A sub-object should not be too small.
-            snegIntOverObjMoreThan = this.settingTsDb.snegIntOverObjMoreThan;       % The region is truncating the target object.
-            snegIntOverObjLessThan = this.settingTsDb.snegIntOverObjLessThan;       % The region is truncating the target object.
             % Parameters for negative mining.
             negIntOverObjLessThan = this.settingTsDb.negIntOverObjLessThan;         % Very small overlap is allowed for background region.
             % Do the job.
@@ -599,7 +610,6 @@ classdef InOutAttNetSide < handle
             newoid2dpid2posregns = cell( size( newoid2oid ) );
             newoid2dpid2posregnsFlip = cell( size( newoid2oid ) );
             newoid2cid = zeros( size( newoid2oid ), 'single' );
-            newoid2snegregns = cell( size( newoid2oid ) );
             newiid2sid2negregns = cell( size( newiid2iid ) );
             newiid2impath = this.db.iid2impath( newiid2iid );
             numIm = numel( newiid2iid );
@@ -644,8 +654,6 @@ classdef InOutAttNetSide < handle
                 [ prid2oid, ~ ] = find( rid2oid2fullandbig( rid2major, : )' );
                 rid2ok = any( rid2oid2fullandbig, 2 ) & rid2major;
                 prid2tlbr = rid2tlbr( 1 : 4, rid2ok );
-                oid2mgtlbr = scaleBoxes( oid2tlbr, 1 + 2 * posMinMargin, 1 + 2 * posMinMargin );
-                oid2mgtlbr = round( oid2mgtlbr );
                 oid2dpid2posregns = cell( numObj, 1 );
                 oid2dpid2posregnsFlip = cell( numObj, 1 );
                 for oid = 1 : numObj,
@@ -655,25 +663,25 @@ classdef InOutAttNetSide < handle
                     % Clipping the regeion boundaries.
                     if sum( prids ),
                         objRegns = prid2tlbr( :, prids );
-                        objRegns( 1, objRegns( 1, : ) > oid2mgtlbr( 1, oid ) ) = oid2mgtlbr( 1, oid );
-                        objRegns( 2, objRegns( 2, : ) > oid2mgtlbr( 2, oid ) ) = oid2mgtlbr( 2, oid );
-                        objRegns( 3, objRegns( 3, : ) < oid2mgtlbr( 3, oid ) ) = oid2mgtlbr( 3, oid );
-                        objRegns( 4, objRegns( 4, : ) < oid2mgtlbr( 4, oid ) ) = oid2mgtlbr( 4, oid );
+                        objRegns( 1, objRegns( 1, : ) > oid2tlbr( 1, oid ) ) = oid2tlbr( 1, oid );
+                        objRegns( 2, objRegns( 2, : ) > oid2tlbr( 2, oid ) ) = oid2tlbr( 2, oid );
+                        objRegns( 3, objRegns( 3, : ) < oid2tlbr( 3, oid ) ) = oid2tlbr( 3, oid );
+                        objRegns( 4, objRegns( 4, : ) < oid2tlbr( 4, oid ) ) = oid2tlbr( 4, oid );
                     else
-                        objRegns = oid2mgtlbr( :, oid );
+                        objRegns = oid2tlbr( :, oid );
                     end;
                     % Compute side directions.
                     dpidBasis = 2 .^ ( 3 : -1 : 0 );
-                    mgtlbr = oid2mgtlbr( :, oid );
+                    tlbr = oid2tlbr( :, oid );
                     for r = 1 : size( objRegns, 2 ),
                         regnCurr = objRegns( :, r );
                         while true,
                             [ didT, didL, didB, didR, didTFlip, didLFlip, didBFlip, didRFlip, regnNext ] = ...
-                                getGtSideDirection( regnCurr, mgtlbr, directionVectorMagnitude, domainWarp );
-                            if didT == 2, regnCurr( 1 ) = mgtlbr( 1 ); end;
-                            if didL == 2, regnCurr( 2 ) = mgtlbr( 2 ); end;
-                            if didB == 2, regnCurr( 3 ) = mgtlbr( 3 ); end;
-                            if didR == 2, regnCurr( 4 ) = mgtlbr( 4 ); end;
+                                getGtSideDirection( regnCurr, tlbr, directionVectorMagnitude, domainWarp );
+                            if didT == 2, regnCurr( 1 ) = tlbr( 1 ); end;
+                            if didL == 2, regnCurr( 2 ) = tlbr( 2 ); end;
+                            if didB == 2, regnCurr( 3 ) = tlbr( 3 ); end;
+                            if didR == 2, regnCurr( 4 ) = tlbr( 4 ); end;
                             dpid = sum( dpidBasis .* ( [ didT, didL, didB, didR ] - 1 ) ) + 1;
                             dpidFlip = sum( dpidBasis .* ( [ didTFlip, didLFlip, didBFlip, didRFlip ] - 1 ) ) + 1;
                             regn = round( regnCurr );
@@ -708,36 +716,6 @@ classdef InOutAttNetSide < handle
                 %         waitforbuttonpress;
                 %     end;
                 % end;
-                % Semi-negative mining.
-                % The region is truncating the target object.
-                numMaxRegnPerObj = numMaxRegionPerDirectionPair * numDirPair;
-                rid2oid2issub = rid2oid2ior >= snegIntOverRegnMoreThan;
-                rid2issub = any( rid2oid2issub, 2 );
-                rid2oid2ok = snegIntOverObjMoreThan <= rid2oid2ioo & ...
-                    snegIntOverObjLessThan >= rid2oid2ioo;
-                rid2ok = rid2issub & all( eq( rid2oid2issub, rid2oid2ok ), 2 );
-                snrid2tlbr = rid2tlbr( 1 : 4, rid2ok );
-                snrid2oid2ok = rid2oid2ok( rid2ok, : );
-                oid2snregns = cell( numObj, 1 );
-                for oid = 1 : numObj,
-                    snrids = snrid2oid2ok( :, oid );
-                    if sum( snrids ),
-                        oid2snregns{ oid } = snrid2tlbr( :, snrids );
-                    else
-                        tlbr = oid2tlbr( :, oid );
-                        w = floor( ( tlbr( 4 ) - tlbr( 2 ) + 1 ) / 2 );
-                        h = floor( ( tlbr( 3 ) - tlbr( 1 ) + 1 ) / 2 );
-                        snregns = repmat( tlbr, 1, 4 );
-                        snregns( 1, 1 ) = snregns( 1, 1 ) + h;
-                        snregns( 2, 2 ) = snregns( 2, 2 ) + w;
-                        snregns( 3, 3 ) = snregns( 3, 3 ) - h;
-                        snregns( 4, 4 ) = snregns( 4, 4 ) - w;
-                        oid2snregns{ oid } = snregns;
-                    end;
-                    numRegnPerObj = size( oid2snregns{ oid }, 2 );
-                    ok = randperm( numRegnPerObj, min( numRegnPerObj, numMaxRegnPerObj ) );
-                    oid2snregns{ oid } = oid2snregns{ oid }( :, ok );
-                end;
                 % Negative mining.
                 % Very small overlap is allowed for background region.
                 numMaxRegnPerSize = max( 1, round( numMaxRegionPerDirectionPair * numDirPair / numSize ) );
@@ -754,7 +732,6 @@ classdef InOutAttNetSide < handle
                 newoid2cid( newoids ) = oid2cid;
                 newoid2dpid2posregns( newoids ) = oid2dpid2posregns;
                 newoid2dpid2posregnsFlip( newoids ) = oid2dpid2posregnsFlip;
-                newoid2snegregns( newoids ) = oid2snregns;
                 newiid2sid2negregns{ newiid } = sid2nregns;
                 newoid = newoid + numObj;
                 cummt = cummt + toc( itime );
@@ -767,7 +744,6 @@ classdef InOutAttNetSide < handle
             subTsDb.oid2cid = newoid2cid;
             subTsDb.oid2dpid2posregns = newoid2dpid2posregns;
             subTsDb.oid2dpid2posregnsFlip = newoid2dpid2posregnsFlip;
-            subTsDb.oid2snegregns = newoid2snegregns;
             subTsDb.iid2sid2negregns = newiid2sid2negregns;
         end
         % Functions for file IO.
@@ -857,7 +833,7 @@ classdef InOutAttNetSide < handle
             ydir = ( yt + yl + yb + yr ) * numel( sid2isdir ) / sum( sid2isdir ) / 4;
             res2.x = [ ycls; ydir; ] / numLy;
         end
-        % % Majorly used in net, if a layer is custom. Backward function in output layer.
+        % Majorly used in net, if a layer is custom. Backward function in output layer.
         function res1 = backward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
@@ -875,17 +851,17 @@ classdef InOutAttNetSide < handle
             yt( 1, 1, :, sid2isdir ) = yt_; clear yt_;
             dzdyL = res2.dzdx / numLy;
             yl_ = vl_nnsoftmaxloss...
-                ( X( :, :, ly.dimDirL, sid2isdir ), gt( :, :, 2, sid2isdir ), dzdyL );
+                ( X( :, :, ly.dimDirL, sid2isdir ), gt( :, :, 3, sid2isdir ), dzdyL );
             yl = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
             yl( 1, 1, :, sid2isdir ) = yl_; clear yl_;
             dzdyB = res2.dzdx / numLy;
             yb_ = vl_nnsoftmaxloss...
-                ( X( :, :, ly.dimDirB, sid2isdir ), gt( :, :, 2, sid2isdir ), dzdyB );
+                ( X( :, :, ly.dimDirB, sid2isdir ), gt( :, :, 4, sid2isdir ), dzdyB );
             yb = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
             yb( 1, 1, :, sid2isdir ) = yb_; clear yb_;
             dzdyR = res2.dzdx / numLy;
             yr_ = vl_nnsoftmaxloss...
-                ( X( :, :, ly.dimDirR, sid2isdir ), gt( :, :, 2, sid2isdir ), dzdyR );
+                ( X( :, :, ly.dimDirR, sid2isdir ), gt( :, :, 5, sid2isdir ), dzdyR );
             yr = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
             yr( 1, 1, :, sid2isdir ) = yr_; clear yr_;
             res1.dzdx = cat( 3, ycls, yt, yl, yb, yr );
