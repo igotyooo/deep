@@ -156,6 +156,51 @@ classdef InOutAttNetSide2 < handle
                     upper( mfilename ) );
             end;
         end
+        function demo( this, fid, setid )
+            if setid == 1,
+                [ ims, gts, iids ] = this.provdBchTr;
+                tsdb = this.tsDb.tr;
+            else
+                [ ims, gts, iids ] = this.provdBchVal;
+                tsdb = this.tsDb.val;
+            end;
+            numCls = this.db.getNumClass;
+            numDir = 2 * 2 * 2 * 2;
+            bsize = this.settingGeneral.batchSize;
+            figure( fid );
+            set( gcf, 'color', 'w' );
+            for s = 1 : bsize,
+                im = ims( :, :, :, s );
+                gt = gts( :, :, :, s );
+                gt = gt( : );
+                im = uint8( bsxfun( @plus, im, this.rgbMean ) );
+                if gt( 1 ) <= numCls,
+                    cname = this.db.cid2name{ gt( 1 ) };
+                elseif gt( 1 ) == numCls + 1,
+                    cname = 'trunc';
+                elseif gt( 1 ) == numCls + 2,
+                    cname = 'bgd';
+                end;
+                if gt( 2 ) <= numDir,
+                    dname = num2str( this.directions.dpid2dp( :, gt( 2 ) )' );
+                    dname( dname == ' ' ) = '';
+                    dname( dname == '1' ) = 'g';
+                    dname( dname == '2' ) = 's';
+                elseif gt( 2 ) == numDir + 1,
+                    dname = 'trunc';
+                elseif gt( 2 ) == numDir + 2,
+                    dname = 'bgd';
+                end;
+                [ ~, iid ] = fileparts( tsdb.iid2impath{ iids( s ) } );
+                iid = str2double( iid );
+                subplot( 1, 2, 1 );
+                plottlbr( this.db.oid2bbox( :, this.db.iid2oids{ iid } ), this.db.iid2impath{ iid }, false, 'r' );
+                title( 'Ground-truth' );
+                subplot( 1, 2, 2 );
+                imshow( im ); title( sprintf( '%s, %s (%d/%d)', cname, dname, s, bsize ) );
+                waitforbuttonpress;
+            end;
+        end;
         % Majorly used in net. Provide a tr/val batch of I/O pairs.
         function [ ims, gts, sid2iid ] = provdBchTr( this )
             batchSize = this.settingGeneral.batchSize;
