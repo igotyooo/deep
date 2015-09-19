@@ -172,6 +172,7 @@ classdef PropObjSide2 < handle
             end;
             im = imread( this.db.iid2impath{ iid } );
             [ rid2tlbr, rid2score, rid2cid ] = this.iid2det( iid );
+            rid2tlbr = round( rid2tlbr );
             figure( fid );
             set( gcf, 'color', 'w' );
             if wait,
@@ -179,12 +180,14 @@ classdef PropObjSide2 < handle
                     name = sprintf( '%s, %.2f', ...
                         this.db.cid2name{ rid2cid( rid ) }, rid2score( rid ) );
                     plottlbr( rid2tlbr( :, rid ), im, false, 'r', { name } ); 
-                    title( sprintf( 'Object proposal. (IID%06d)', iid ) );
+                    title( sprintf( 'Object proposal: %d/%d regions. (IID%06d)', ...
+                        rid, size( rid2tlbr, 2 ), iid ) );
                     waitforbuttonpress;
                 end;
             else
                 plottlbr( rid2tlbr, im, false, { 'r'; 'g'; 'b'; 'y' } );
-                title( sprintf( 'Object proposal. (IID%06d)', iid ) );
+                title( sprintf( 'Object proposal: %d regions. (IID%06d)', ...
+                    size( rid2tlbr, 2 ), iid ) );
             end;
         end
         function [ rid2tlbr, rid2score, rid2cid ] = ...
