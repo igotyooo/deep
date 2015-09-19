@@ -1,4 +1,4 @@
-classdef PropObj < handle
+classdef PropObjSide2 < handle
     properties
         db;
         attNet;
@@ -9,7 +9,7 @@ classdef PropObj < handle
         settingPost;
     end
     methods( Access = public )
-        function this = PropObj( db, attNet, settingMain, settingPost )
+        function this = PropObjSide2( db, attNet, settingMain, settingPost )
             this.db = db;
             this.attNet = attNet;
             this.settingMain.numScaling = 24;
@@ -36,7 +36,6 @@ classdef PropObj < handle
                 upper( mfilename ) );
             [ this.patchSide, this.stride ] = ...
                 getNetProperties( this.attNet, numel( this.attNet.layers ) - 1 );
-            % Determine scaling factors.
             % Determine scaling factors.
             fpath = this.getScaleFactorPath;
             try
@@ -102,14 +101,32 @@ classdef PropObj < handle
                 dimDir = this.attNet.layers{ end }.dimDir;
                 rid2outCls = rid2out( dimCls, : );
                 rid2outDir = rid2out( dimDir, : );
-                [ rid2scoreCls, rid2cidCls ] = ...
-                    max( rid2outCls, [  ], 1 );
-                [ rid2scoreDir, rid2cidDir ] = ...
-                    max( rid2outDir, [  ], 1 );
+                
+                % Original filtering.
+                % [ rid2scoreCls, rid2cidCls ] = ...
+                %     max( rid2outCls, [  ], 1 );
+                % [ rid2scoreDir, rid2cidDir ] = ...
+                %     max( rid2outDir, [  ], 1 );
+                % rid2okCls = rid2cidCls ~= ( numel( dimCls ) - 1 ) & ...
+                %     rid2cidCls ~= numel( dimCls );
+                % rid2okDir = rid2cidDir == 1;
+                % rid2ok = rid2okCls & rid2okDir;
+
+                % New filtering.
+                [ rid2rank2sCls, rid2rank2cCls ] = ...
+                    sort( rid2outCls, 1, 'descend' );
+                rid2scoreCls = rid2rank2sCls( 1, : );
+                rid2cidCls = rid2rank2cCls( 1, : );
                 rid2okCls = rid2cidCls ~= ( numel( dimCls ) - 1 ) & ...
                     rid2cidCls ~= numel( dimCls );
-                rid2okDir = rid2cidDir == 1;
-                rid2ok = rid2okCls & rid2okDir;
+                [ rid2rank2sDir, rid2rank2cDir ] = ...
+                    sort( rid2outDir, 1, 'descend' );
+                rid2scoreDir = rid2rank2sDir( 1, : );
+                rid2okDir1 = logical( prod( rid2rank2cDir( 1 : 2, : ) - ( numel( dimDir ) - 1 ), 1 ) );
+                rid2okDir2 = logical( prod( rid2rank2cDir( 1 : 2, : ) - numel( dimDir ), 1 ) );
+                rid2okDir3 = rid2rank2cDir( 1, : ) == 1;
+                rid2ok = rid2okCls & rid2okDir1 & rid2okDir2 & rid2okDir3;
+                
                 rid2outCls = rid2outCls( :, rid2ok );
                 rid2outDir = rid2outDir( :, rid2ok );
                 rid2scoreCls = rid2scoreCls( rid2ok ) - ...
@@ -207,7 +224,7 @@ classdef PropObj < handle
         % Functions for identification.
         function name = getName( this )
             name = sprintf( ...
-                'PROP_%s_OF_%s', ...
+                'PROPSIDE2_%s_OF_%s', ...
                 this.settingMain.changes, ...
                 this.attNet.name );
             name( strfind( name, '__' ) ) = '';
