@@ -1,4 +1,4 @@
-classdef PropObjSide < handle
+classdef PropObjSideIndp < handle
     properties
         db;
         attNet;
@@ -9,7 +9,7 @@ classdef PropObjSide < handle
         settingPost;
     end
     methods( Access = public )
-        function this = PropObjSide( db, attNet, settingMain, settingPost )
+        function this = PropObjSideIndp( db, attNet, settingMain, settingPost )
             this.db = db;
             this.attNet = attNet;
             this.settingMain.numScaling = 24;
@@ -237,7 +237,7 @@ classdef PropObjSide < handle
         % Functions for identification.
         function name = getName( this )
             name = sprintf( ...
-                'PROPSIDE_%s_OF_%s', ...
+                'PROPSIDINDP_%s_OF_%s', ...
                 this.settingMain.changes, ...
                 this.attNet.name );
             name( strfind( name, '__' ) ) = '';

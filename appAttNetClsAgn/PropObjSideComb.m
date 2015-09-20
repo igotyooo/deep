@@ -1,4 +1,4 @@
-classdef PropObjSide2 < handle
+classdef PropObjSideComb < handle
     properties
         db;
         attNet;
@@ -9,7 +9,7 @@ classdef PropObjSide2 < handle
         settingPost;
     end
     methods( Access = public )
-        function this = PropObjSide2( db, attNet, settingMain, settingPost )
+        function this = PropObjSideComb( db, attNet, settingMain, settingPost )
             this.db = db;
             this.attNet = attNet;
             this.settingMain.numScaling = 24;
@@ -210,7 +210,7 @@ classdef PropObjSide2 < handle
         % Functions for identification.
         function name = getName( this )
             name = sprintf( ...
-                'PROPSIDE2_%s_OF_%s', ...
+                'PROPSIDCMB_%s_OF_%s', ...
                 this.settingMain.changes, ...
                 this.attNet.name );
             name( strfind( name, '__' ) ) = '';
