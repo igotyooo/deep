@@ -124,6 +124,16 @@ classdef PropObjSide < handle
                 rid2okDirL = rid2cidDirL == 1;
                 rid2okDirB = rid2cidDirB == 1;
                 rid2okDirR = rid2cidDirR == 1;
+                
+                thrshCls = -Inf; 10; 
+                rid2okCls = rid2okCls & ( rid2scoreCls > thrshCls );
+                
+                thrshDir = 1.3; 0.9; -Inf; 
+                rid2okDirT = rid2okDirT & ( rid2scoreDirT > thrshDir );
+                rid2okDirL = rid2okDirL & ( rid2scoreDirL > thrshDir );
+                rid2okDirB = rid2okDirB & ( rid2scoreDirB > thrshDir );
+                rid2okDirR = rid2okDirR & ( rid2scoreDirR > thrshDir );
+                
                 rid2ok = rid2okCls & ...
                     rid2okDirT & rid2okDirL & rid2okDirB & rid2okDirR;
                 rid2scoreCls = rid2scoreCls( rid2ok ) * 2 - sum( rid2outCls( :, rid2ok ), 1 );
