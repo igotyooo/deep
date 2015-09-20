@@ -1,4 +1,4 @@
-classdef InOutAttNetSide < handle
+classdef InOutAttNetSideIndp < handle
     properties
         db;                     % A general db.
         tsDb;                   % A task specific db to be made. If it is unnecessary, just fetch db.
@@ -19,7 +19,7 @@ classdef InOutAttNetSide < handle
     % Public interface. Net will be trained with the following functions only. %
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods( Access = public )
-        function this = InOutAttNetSide...
+        function this = InOutAttNetSideIndp...
                 ( db, settingTsDb, settingTsNet, settingGeneral )
             this.db = db;
             this.tsMetricName = { 'cls err1'; 'dir err1'; };
@@ -294,8 +294,8 @@ classdef InOutAttNetSide < handle
             layers{ end }.dimDirL = numOutDimCls + 2 + ( 1 : 2 );
             layers{ end }.dimDirB = numOutDimCls + 4 + ( 1 : 2 );
             layers{ end }.dimDirR = numOutDimCls + 6 + ( 1 : 2 );
-            layers{ end }.forward = @InOutAttNetSide.forward;
-            layers{ end }.backward = @InOutAttNetSide.backward;
+            layers{ end }.forward = @InOutAttNetSideIndp.forward;
+            layers{ end }.backward = @InOutAttNetSideIndp.backward;
             % Form the net in VGG style.
             net.layers = layers;
             net.normalization.averageImage = [  ];
@@ -397,7 +397,7 @@ classdef InOutAttNetSide < handle
         end
         % Function for identification.
         function name = getName( this )
-            name = sprintf( 'IOANETSID_%s_OF_%s', ...
+            name = sprintf( 'IOANETSIDINDP_%s_OF_%s', ...
                 this.settingGeneral.changes, ...
                 this.getTsDbName );
             name( strfind( name, '__' ) ) = '';
@@ -785,7 +785,7 @@ classdef InOutAttNetSide < handle
         end
         function name = getTsDbName( this )
             name = sprintf( ...
-                'DBANETSID_%s_OF_%s', ...
+                'DBANETSIDINDP_%s_OF_%s', ...
                 this.settingTsDb.changes, ...
                 this.db.getName );
             name( strfind( name, '__' ) ) = '';
@@ -805,7 +805,7 @@ classdef InOutAttNetSide < handle
         % Function for task-specific network identification.
         function name = getTsNetName( this )
             name = sprintf( ...
-                'ANETSID_%s_%s', ...
+                'ANETSIDINDP_%s_%s', ...
                 this.settingTsNet.pretrainedNetName, ...
                 this.settingTsNet.changes );
             name( strfind( name, '__' ) ) = '';
