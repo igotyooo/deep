@@ -288,9 +288,9 @@ classdef InOutAttNetSideIndp3 < handle
             layers{ end }.type = 'custom';
             layers{ end }.dimCls = 1 : numOutDimCls;
             layers{ end }.dimDirT = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
-            layers{ end }.dimDirL = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
-            layers{ end }.dimDirB = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
-            layers{ end }.dimDirR = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.dimDirL = numOutDimCls + 1 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.dimDirB = numOutDimCls + 2 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.dimDirR = numOutDimCls + 3 * numDirPerSide + ( 1 : numDirPerSide );
             layers{ end }.forward = @InOutAttNetSideIndp3.forward;
             layers{ end }.backward = @InOutAttNetSideIndp3.backward;
             % Form the net in VGG style.
@@ -485,8 +485,8 @@ classdef InOutAttNetSideIndp3 < handle
             dpid2dp = this.directions.dpid2dp;
             numDirPerSide = 3;
             dpidBasis = numDirPerSide .^ ( 3 : -1 : 0 );
-            dpidAllGo = dpidBasis * ( [ 1, 1, 1, 1 ] - 1 ) + 1;
-            dpidAllStop = dpidBasis * ( [ 2, 2, 2, 2 ] - 1 ) + 1;
+            dpidAllGo = dpidBasis * ( [ 1, 1, 1, 1 ]' - 1 ) + 1;
+            dpidAllStop = dpidBasis * ( [ 2, 2, 2, 2 ]' - 1 ) + 1;
             pairSize = size( dpid2dp, 1 );
             sid2iid = zeros( numSample, 1, 'single' );
             sid2tlbr = zeros( 4, numSample, 'single' );
