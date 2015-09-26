@@ -828,8 +828,11 @@ classdef InOutAttNetSideComb < handle
         end
         function name = getScaleFactorName( this )
             numScaling = this.settingTsDb.numScaling;
-            name = sprintf( ...
-                'SFTR_N%03d_OF_%s', numScaling, this.db.getName );
+            piormt = this.settingTsDb.posIntOverRegnMoreThan;
+            piormt = num2str( piormt );
+            piormt( piormt == '.' ) = 'P';
+            name = sprintf( 'SFTR_N%03d_PIORMT%s_OF_%s', ...
+                numScaling, piormt, this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end

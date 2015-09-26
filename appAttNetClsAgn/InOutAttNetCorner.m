@@ -695,8 +695,12 @@ classdef InOutAttNetCorner < handle
             path = fullfile( this.getRgbMeanDir, fname );
         end
         function name = getScaleFactorName( this )
-            name = sprintf( ...
-                'SF_OF_%s', this.db.getName );
+            numScaling = this.settingTsDb.numScaling;
+            piormt = this.settingTsDb.posIntOverRegnMoreThan;
+            piormt = num2str( piormt );
+            piormt( piormt == '.' ) = 'P';
+            name = sprintf( 'SFTR_N%03d_PIORMT%s_OF_%s', ...
+                numScaling, piormt, this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
