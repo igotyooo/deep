@@ -356,12 +356,13 @@ classdef InOutAttNetSideIndp3 < handle
         % For this target application, object detection, 
         % the metric is top-1 accuracy.
         function tsMetric = computeTsMetric( this, res, gts )
+            numDirPerSide = 3;
             numOutDimCls = numel( this.db.cid2name ) + 1;
             dimCls = 1 : numOutDimCls;
-            dimDirT = numOutDimCls + 0 + ( 1 : 2 );
-            dimDirL = numOutDimCls + 2 + ( 1 : 2 );
-            dimDirB = numOutDimCls + 4 + ( 1 : 2 );
-            dimDirR = numOutDimCls + 6 + ( 1 : 2 );
+            dimDirT = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
+            dimDirL = numOutDimCls + 1 * numDirPerSide + ( 1 : numDirPerSide );
+            dimDirB = numOutDimCls + 2 * numDirPerSide + ( 1 : numDirPerSide );
+            dimDirR = numOutDimCls + 3 * numDirPerSide + ( 1 : numDirPerSide );
             output = gather( res( end - 1 ).x );
             gts = gather( gts );
             sid2isdir = logical( gts( 1, 1, 2, : ) );
@@ -835,6 +836,7 @@ classdef InOutAttNetSideIndp3 < handle
             X = res1.x;
             gt = ly.class;
             numLy = 5;
+            numDirPerSide = numel( ly.dimDirT );
             sid2isdir = logical( gt( 1, 1, 2, : ) );
             sid2isdir = sid2isdir( : );
             bsize = numel( sid2isdir );
@@ -844,22 +846,22 @@ classdef InOutAttNetSideIndp3 < handle
             dzdyT = res2.dzdx / numLy;
             yt_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirT, sid2isdir ), gt( :, :, 2, sid2isdir ), dzdyT );
-            yt = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
+            yt = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yt( 1, 1, :, sid2isdir ) = yt_; clear yt_;
             dzdyL = res2.dzdx / numLy;
             yl_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirL, sid2isdir ), gt( :, :, 3, sid2isdir ), dzdyL );
-            yl = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
+            yl = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yl( 1, 1, :, sid2isdir ) = yl_; clear yl_;
             dzdyB = res2.dzdx / numLy;
             yb_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirB, sid2isdir ), gt( :, :, 4, sid2isdir ), dzdyB );
-            yb = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
+            yb = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yb( 1, 1, :, sid2isdir ) = yb_; clear yb_;
             dzdyR = res2.dzdx / numLy;
             yr_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirR, sid2isdir ), gt( :, :, 5, sid2isdir ), dzdyR );
-            yr = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
+            yr = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yr( 1, 1, :, sid2isdir ) = yr_; clear yr_;
             res1.dzdx = cat( 3, ycls, yt, yl, yb, yr );
         end
