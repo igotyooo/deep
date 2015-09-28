@@ -93,6 +93,7 @@ classdef PropObjSideIndp < handle
                     this.im2det( im );
                 prop.rid2tlbr = rid2tlbr;
                 prop.rid2out = rid2out;
+                this.makeDir;
                 save( fpath, 'prop' );
             end;
             if nargout,
@@ -128,7 +129,7 @@ classdef PropObjSideIndp < handle
                 thrshCls = -Inf; 10; 
                 rid2okCls = rid2okCls & ( rid2scoreCls > thrshCls );
                 
-                thrshDir = 1.3; 0.9; -Inf; 
+                thrshDir = 1.3; 1; 0.9; -Inf; 
                 rid2okDirT = rid2okDirT & ( rid2scoreDirT > thrshDir );
                 rid2okDirL = rid2okDirL & ( rid2scoreDirL > thrshDir );
                 rid2okDirB = rid2okDirB & ( rid2scoreDirB > thrshDir );
