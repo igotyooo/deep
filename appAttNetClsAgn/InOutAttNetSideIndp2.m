@@ -205,7 +205,7 @@ classdef InOutAttNetSideIndp2 < handle
             for o = 1 : numObj,
                 oid = oids( o );
                 cid = cids( o );
-                cname = this.db.cid2name{ cids };
+                cname = this.db.cid2name{ cid };
                 for dpid = 1 : numDirPair,
                     dname = this.directions.dpid2dp( :, dpid )';
                     dname = num2str( dname );

@@ -190,6 +190,42 @@ classdef InOutAttNetSideIndp < handle
                 waitforbuttonpress;
             end;
         end;
+        function demo2( this, fid, iid )
+            if nargin < 3,
+                iid = randsample( this.db.getNumIm, 1 );
+            end;
+            setid = this.db.iid2setid( iid );
+            if setid == 1,
+                subdb = this.tsDb.tr;
+            else
+                subdb = this.tsDb.val;
+            end;
+            impath = this.db.iid2impath{ iid };
+            newiid = find( ismember( subdb.iid2impath, impath ) );
+            im = imread( impath );
+            oids = find( subdb.oid2iid == newiid );
+            cids = subdb.oid2cid( oids );
+            numDirPair = size( subdb.oid2dpid2posregns{ 1 }, 1 );
+            numObj = numel( oids );
+            figure( fid );
+            set( gcf, 'color', 'w' );
+            for o = 1 : numObj,
+                oid = oids( o );
+                cid = cids( o );
+                cname = this.db.cid2name{ cid };
+                for dpid = 1 : numDirPair,
+                    dname = this.directions.dpid2dp( :, dpid )';
+                    dname = num2str( dname );
+                    dname( dname == ' ' ) = '';
+                    dname( dname == '1' ) = 'g';
+                    dname( dname == '2' ) = 's';
+                    regns = subdb.oid2dpid2posregns{ oid }{ dpid };
+                    plottlbr( regns, im, false, 'r' );
+                    title( sprintf( '%s, %s', cname, dname ) );
+                    waitforbuttonpress;
+                end;
+            end;
+        end;
         % Majorly used in net. Provide a tr/val batch of I/O pairs.
         function [ ims, gts, sid2iid ] = provdBchTr( this )
             batchSize = this.settingGeneral.batchSize;
