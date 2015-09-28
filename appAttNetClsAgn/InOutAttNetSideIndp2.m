@@ -36,6 +36,8 @@ classdef InOutAttNetSideIndp2 < handle
             pretrainedNet                                       = path.net.vgg_m;
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
+            this.settingTsNet.weightClassificationLoss          = 0.2;
+            this.settingTsNet.weightDirectionLoss               = 0.8;
             % Parameters to provide batches.
             this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.batchSize                       = 256;
@@ -301,6 +303,8 @@ classdef InOutAttNetSideIndp2 < handle
             end
             % Initialize the output layer.
             numDirPerSide = 2;
+            weightClassificationLoss = this.settingTsNet.weightClassificationLoss;
+            weightDirectionLoss = this.settingTsNet.weightDirectionLoss;
             filterChannel = size( layers{ end - 3 }.weights{ 1 }, 4 ); 
             numOutDimCls = numel( this.db.cid2name ) + 1;
             numOutDim = numOutDimCls + 4 * numDirPerSide;
@@ -324,6 +328,8 @@ classdef InOutAttNetSideIndp2 < handle
             layers{ end }.dimDirL = numOutDimCls + 1 * numDirPerSide + ( 1 : numDirPerSide );
             layers{ end }.dimDirB = numOutDimCls + 2 * numDirPerSide + ( 1 : numDirPerSide );
             layers{ end }.dimDirR = numOutDimCls + 3 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.weiClsLoss = weightClassificationLoss;
+            layers{ end }.weiDirLoss = weightDirectionLoss;
             layers{ end }.forward = @InOutAttNetSideIndp2.forward;
             layers{ end }.backward = @InOutAttNetSideIndp2.backward;
             % Form the net in VGG style.
@@ -840,7 +846,6 @@ classdef InOutAttNetSideIndp2 < handle
         function res2 = forward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
-            numLy = 5;
             sid2isdir = logical( gt( 1, 1, 2, : ) );
             sid2isdir = sid2isdir( : );
             ycls = vl_nnsoftmaxloss...
@@ -853,37 +858,38 @@ classdef InOutAttNetSideIndp2 < handle
                 ( X( :, :, ly.dimDirB, sid2isdir ), gt( :, :, 4, sid2isdir ) );
             yr = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirR, sid2isdir ), gt( :, :, 5, sid2isdir ) );
-            ydir = ( yt + yl + yb + yr ) * numel( sid2isdir ) / sum( sid2isdir ) / 4;
-            res2.x = [ ycls; ydir; ] / numLy;
+            ydir = ( yt + yl + yb + yr ) * ly.weiDirLoss / 4;
+            ydir = ydir * numel( sid2isdir ) / sum( sid2isdir );
+            ycls = ycls * ly.weiClsLoss;
+            res2.x = [ ycls; ydir; ];
         end
         % Majorly used in net, if a layer is custom. Backward function in output layer.
         function res1 = backward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
-            numLy = 5;
             numDirPerSide = numel( ly.dimDirT );
             sid2isdir = logical( gt( 1, 1, 2, : ) );
             sid2isdir = sid2isdir( : );
             bsize = numel( sid2isdir );
-            dzdyCls = res2.dzdx / numLy;
+            dzdyCls = res2.dzdx * ly.weiClsLoss;
             ycls = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimCls, : ), gt( :, :, 1, : ), dzdyCls );
-            dzdyT = res2.dzdx / numLy;
+            dzdyT = res2.dzdx * ly.weiDirLoss / 4;
             yt_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirT, sid2isdir ), gt( :, :, 2, sid2isdir ), dzdyT );
             yt = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yt( 1, 1, :, sid2isdir ) = yt_; clear yt_;
-            dzdyL = res2.dzdx / numLy;
+            dzdyL = res2.dzdx * ly.weiDirLoss / 4;
             yl_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirL, sid2isdir ), gt( :, :, 3, sid2isdir ), dzdyL );
             yl = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yl( 1, 1, :, sid2isdir ) = yl_; clear yl_;
-            dzdyB = res2.dzdx / numLy;
+            dzdyB = res2.dzdx * ly.weiDirLoss / 4;
             yb_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirB, sid2isdir ), gt( :, :, 4, sid2isdir ), dzdyB );
             yb = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yb( 1, 1, :, sid2isdir ) = yb_; clear yb_;
-            dzdyR = res2.dzdx / numLy;
+            dzdyR = res2.dzdx * ly.weiDirLoss / 4;
             yr_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirR, sid2isdir ), gt( :, :, 5, sid2isdir ), dzdyR );
             yr = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
