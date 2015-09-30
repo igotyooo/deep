@@ -525,8 +525,8 @@ classdef InOutAttNetSideIndp < handle
             dpid2dp = this.directions.dpid2dp;
             numDirPerSide = 2;
             dpidBasis = numDirPerSide .^ ( 3 : -1 : 0 );
-            dpidAllGo = dpidBasis * ( [ 1, 1, 1, 1 ]' - 1 ) + 1;
-            dpidAllStop = dpidBasis * ( [ 2, 2, 2, 2 ]' - 1 ) + 1;
+            dpidAllGo = dpidBasis * ( [ 1; 1; 1; 1; ] - 1 ) + 1;
+            dpidAllStop = dpidBasis * ( [ 2; 2; 2; 2; ] - 1 ) + 1;
             pairSize = size( dpid2dp, 1 );
             sid2iid = zeros( numSample, 1, 'single' );
             sid2tlbr = zeros( 4, numSample, 'single' );
@@ -638,7 +638,7 @@ classdef InOutAttNetSideIndp < handle
             numDirPair = size( this.directions.dpid2dp, 2 );
             dilate = this.settingTsDb.dilate;
             numDirPerSide = 2;
-            dpidBasis = numDirPerSide .^ ( 3 : -1 : 0 )';
+            dpidBasis = numDirPerSide .^ ( 3 : -1 : 0 );
             domainWarp = [ this.patchSide; this.patchSide; ];
             % Parameters for positive mining.
             posIntOverRegnMoreThan = this.settingTsDb.posIntOverRegnMoreThan;       % A target object should be large enough.
@@ -728,8 +728,8 @@ classdef InOutAttNetSideIndp < handle
                             if didL == 2, regnCurr( 2 ) = tlbr( 2 ); end;
                             if didB == 2, regnCurr( 3 ) = tlbr( 3 ); end;
                             if didR == 2, regnCurr( 4 ) = tlbr( 4 ); end;
-                            dpid = sum( dpidBasis .* ( [ didT, didL, didB, didR ] - 1 ) ) + 1;
-                            dpidFlip = sum( dpidBasis .* ( [ didTFlip, didLFlip, didBFlip, didRFlip ] - 1 ) ) + 1;
+                            dpid = dpidBasis * ( [ didT; didL; didB; didR;] - 1 ) + 1;
+                            dpidFlip = dpidBasis * ( [ didTFlip; didLFlip; didBFlip; didRFlip; ] - 1 ) + 1;
                             regn = round( regnCurr );
                             oid2dpid2posregns{ oid }{ dpid } = [ oid2dpid2posregns{ oid }{ dpid }, regn ];
                             oid2dpid2posregnsFlip{ oid }{ dpidFlip } = [ oid2dpid2posregnsFlip{ oid }{ dpidFlip }, regn ];

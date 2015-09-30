@@ -533,8 +533,8 @@ classdef InOutAttNetCorner < handle
             dpid2dp = this.directions.dpid2dp;
             numDirPerSide = 4;
             dpidBasis = numDirPerSide .^ ( 1 : -1 : 0 );
-            dpidAllGo = dpidBasis * ( [ 2, 2 ]' - 1 ) + 1;
-            dpidAllStop = dpidBasis * ( [ 4, 4 ]' - 1 ) + 1;
+            dpidAllGo = dpidBasis * ( [ 2; 2; ] - 1 ) + 1;
+            dpidAllStop = dpidBasis * ( [ 4; 4; ] - 1 ) + 1;
             pairSize = size( dpid2dp, 1 );
             sid2iid = zeros( numSample, 1, 'single' );
             sid2tlbr = zeros( 4, numSample, 'single' );
@@ -646,7 +646,7 @@ classdef InOutAttNetCorner < handle
             numDirPair = size( this.directions.dpid2dp, 2 );
             dilate = this.settingTsDb.dilate;
             numDirPerSide = 4;
-            dpidBasis = numDirPerSide .^ ( 1 : -1 : 0 )';
+            dpidBasis = numDirPerSide .^ ( 1 : -1 : 0 );
             domainWarp = [ this.patchSide; this.patchSide; ];
             % Parameters for positive mining.
             posIntOverRegnMoreThan = this.settingTsDb.posIntOverRegnMoreThan;       % A target object should be large enough.
@@ -732,10 +732,10 @@ classdef InOutAttNetCorner < handle
                         while true, 
                             [ didTl, didBr, didTlFlip, didBrFlip, regnNext ] = ...
                                 getGtCornerDirection( regnCurr, tlbr, this.directions.did2vecTl, this.directions.did2vecBr, directionVectorMagnitude, domainWarp );
-                            if didTl == 4, regnCurr( 1 : 2 ) = tlbr( 1 : 2 ); end;
-                            if didBr == 4, regnCurr( 3 : 4 ) = tlbr( 3 : 4 ); end;
-                            dpid = sum( dpidBasis .* ( [ didTl, didBr ] - 1 ) ) + 1;
-                            dpidFlip = sum( dpidBasis .* ( [ didTlFlip, didBrFlip ] - 1 ) ) + 1;
+                            if didTl == numDirPerSide, regnCurr( 1 : 2 ) = tlbr( 1 : 2 ); end;
+                            if didBr == numDirPerSide, regnCurr( 3 : 4 ) = tlbr( 3 : 4 ); end;
+                            dpid = dpidBasis * ( [ didTl, didBr ] - 1 ) + 1;
+                            dpidFlip = dpidBasis * ( [ didTlFlip, didBrFlip ] - 1 ) + 1;
                             regn = round( regnCurr );
                             oid2dpid2posregns{ oid }{ dpid } = [ oid2dpid2posregns{ oid }{ dpid }, regn ];
                             oid2dpid2posregnsFlip{ oid }{ dpidFlip } = [ oid2dpid2posregnsFlip{ oid }{ dpidFlip }, regn ];
