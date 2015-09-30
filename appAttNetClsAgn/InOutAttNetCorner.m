@@ -271,7 +271,7 @@ classdef InOutAttNetCorner < handle
             [ ims, gts ] = this.makeImGtPairs...
                 ( iid2impath, sid2iid, sid2tlbr, sid2flip, sid2gt );
         end
-        function [ ims, gts ] = provdBchVal( this )
+        function [ ims, gts, sid2iid ] = provdBchVal( this )
             batchSize = this.settingGeneral.batchSize;
             if isempty( this.poolVal.sid2iid ),
                 % Make validation pool to be consumed in an epoch.
@@ -539,7 +539,7 @@ classdef InOutAttNetCorner < handle
             sid2iid = zeros( numSample, 1, 'single' );
             sid2tlbr = zeros( 4, numSample, 'single' );
             sid2flip = zeros( numSample, 1, 'single' );
-            sid2gt = zeros( 1 + 4, numSample, 'single' );
+            sid2gt = zeros( 1 + 2, numSample, 'single' );
             sid = 0; oid = 0; iter = 0;
             while true,
                 iter = iter + 1;
