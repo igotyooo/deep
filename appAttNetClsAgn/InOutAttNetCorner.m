@@ -41,6 +41,8 @@ classdef InOutAttNetCorner < handle
             pretrainedNet                                       = path.net.vgg_m;
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
+            this.settingTsNet.weightClassificationLoss          = 0.2;
+            this.settingTsNet.weightDirectionLoss               = 0.8;
             % Parameters to provide batches.
             this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.batchSize                       = 256;
@@ -67,9 +69,12 @@ classdef InOutAttNetCorner < handle
             did2angBr = ( pi : angstep : ( pi * 3 / 2 ) )';
             this.directions.did2vecTl = [ [ cos( did2angTl' ); sin( did2angTl' ); ], [ 0; 0; ] ];
             this.directions.did2vecBr = [ [ cos( did2angBr' ); sin( did2angBr' ); ], [ 0; 0; ] ];
-            foo = meshgrid( 1 : numDirection + 1, 1 : numDirection + 1 );
-            this.directions.dpid2dp = foo';
-            this.directions.dpid2dp = [ foo( : ), this.directions.dpid2dp( : ) ]';
+            numDirPerSide = 4;
+            numSide = 2;
+            numPair = numDirPerSide ^ numSide;
+            dpid2dp = dec2base( ( 0 : numPair - 1 )', numDirPerSide, numSide )';
+            dpid2dp = mod( double( dpid2dp ), double( '0' ) - 1 );
+            this.directions.dpid2dp = dpid2dp;
             fprintf( '%s: Done.\n', upper( mfilename ) );
             % Determine patch stride and side.
             fprintf( '%s: Determine stride and patch side.\n', ...
@@ -148,6 +153,100 @@ classdef InOutAttNetCorner < handle
                     upper( mfilename ) );
             end;
         end
+        function demo( this, fid, setid )
+            if setid == 1,
+                [ ims, gts, iids ] = this.provdBchTr;
+                tsdb = this.tsDb.tr;
+            else
+                [ ims, gts, iids ] = this.provdBchVal;
+                tsdb = this.tsDb.val;
+            end;
+            numCls = this.db.getNumClass;
+            bsize = this.settingGeneral.batchSize;
+            figure( fid );
+            set( gcf, 'color', 'w' );
+            for s = 1 : bsize,
+                im = ims( :, :, :, s );
+                gt = gts( :, :, :, s );
+                gt = gt( : );
+                gtCls = gt( 1 );
+                gtDir = gt( 2 : end );
+                im = uint8( bsxfun( @plus, im, this.rgbMean ) );
+                if gtCls <= numCls,
+                    cname = this.db.cid2name{ gtCls };
+                elseif gtCls == numCls + 1,
+                    cname = 'bgd';
+                end;
+                switch gtDir( 1 )
+                    case 0, dnameTl = 'bgd';
+                    case 1, dnameTl = 'down';
+                    case 2, dnameTl = 'diag';
+                    case 3, dnameTl = 'right';
+                    case 4, dnameTl = 'stop';
+                end;
+                switch gtDir( 2 )
+                    case 0, dnameBr = 'bgd';
+                    case 1, dnameBr = 'up';
+                    case 2, dnameBr = 'diag';
+                    case 3, dnameBr = 'left';
+                    case 4, dnameBr = 'stop';
+                end;
+                [ ~, iid ] = fileparts( tsdb.iid2impath{ iids( s ) } );
+                iid = str2double( iid );
+                subplot( 1, 2, 1 );
+                plottlbr( this.db.oid2bbox( :, this.db.iid2oids{ iid } ), this.db.iid2impath{ iid }, false, 'r' );
+                title( 'Ground-truth' );
+                subplot( 1, 2, 2 );
+                imshow( im ); title( sprintf( '%s, %s/%s (%d/%d)', cname, dnameTl, dnameBr, s, bsize ) );
+                waitforbuttonpress;
+            end;
+        end;
+        function demo2( this, fid, iid )
+            if nargin < 3,
+                iid = randsample( this.db.getNumIm, 1 );
+            end;
+            setid = this.db.iid2setid( iid );
+            if setid == 1,
+                subdb = this.tsDb.tr;
+            else
+                subdb = this.tsDb.val;
+            end;
+            impath = this.db.iid2impath{ iid };
+            newiid = find( ismember( subdb.iid2impath, impath ) );
+            im = imread( impath );
+            oids = find( subdb.oid2iid == newiid );
+            cids = subdb.oid2cid( oids );
+            numDirPair = size( subdb.oid2dpid2posregns{ 1 }, 1 );
+            numObj = numel( oids );
+            figure( fid );
+            set( gcf, 'color', 'w' );
+            for o = 1 : numObj,
+                oid = oids( o );
+                cid = cids( o );
+                cname = this.db.cid2name{ cid };
+                for dpid = 1 : numDirPair,
+                    gtDir = this.directions.dpid2dp( :, dpid )';
+                    switch gtDir( 1 )
+                        case 0, dnameTl = 'bgd';
+                        case 1, dnameTl = 'down';
+                        case 2, dnameTl = 'diag';
+                        case 3, dnameTl = 'right';
+                        case 4, dnameTl = 'stop';
+                    end;
+                    switch gtDir( 2 )
+                        case 0, dnameBr = 'bgd';
+                        case 1, dnameBr = 'up';
+                        case 2, dnameBr = 'diag';
+                        case 3, dnameBr = 'left';
+                        case 4, dnameBr = 'stop';
+                    end;
+                    regns = subdb.oid2dpid2posregns{ oid }{ dpid };
+                    plottlbr( regns, im, false, 'r' );
+                    title( sprintf( '%s, %s/%s', cname, dnameTl, dnameBr ) );
+                    waitforbuttonpress;
+                end;
+            end;
+        end;
         % Majorly used in net. Provide a tr/val batch of I/O pairs.
         function [ ims, gts, sid2iid ] = provdBchTr( this )
             batchSize = this.settingGeneral.batchSize;
@@ -229,9 +328,12 @@ classdef InOutAttNetCorner < handle
                 end;
             end
             % Initialize the output layer.
+            numDirPerSide = 4;
+            weightClassificationLoss = this.settingTsNet.weightClassificationLoss;
+            weightDirectionLoss = this.settingTsNet.weightDirectionLoss;
             filterChannel = size( layers{ end - 3 }.weights{ 1 }, 4 ); 
             numOutDimCls = numel( this.db.cid2name ) + 1;
-            numOutDim = numOutDimCls + 4 + 4;
+            numOutDim = numOutDimCls + 2 * numDirPerSide;
             weight = 0.01 * randn( 1, 1, filterChannel, numOutDim, 'single' );
             bias = zeros( 1, numOutDim, 'single' );
             layers{ end - 1 } = struct(...
@@ -248,8 +350,10 @@ classdef InOutAttNetCorner < handle
                 zeros( size( layers{ end - 1 }.weights{ 2 } ), 'single' );
             layers{ end }.type = 'custom';
             layers{ end }.dimCls = 1 : numOutDimCls;
-            layers{ end }.dimDirTl = numOutDimCls + 0 + ( 1 : 4 );
-            layers{ end }.dimDirBr = numOutDimCls + 4 + ( 1 : 4 );
+            layers{ end }.dimDirTl = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.dimDirBr = numOutDimCls + 1 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.weiClsLoss = weightClassificationLoss;
+            layers{ end }.weiDirLoss = weightDirectionLoss;
             layers{ end }.forward = @InOutAttNetCorner.forward;
             layers{ end }.backward = @InOutAttNetCorner.backward;
             % Form the net in VGG style.
@@ -311,10 +415,11 @@ classdef InOutAttNetCorner < handle
         % For this target application, object detection, 
         % the metric is top-1 accuracy.
         function tsMetric = computeTsMetric( this, res, gts )
+            numDirPerSide = 4;
             numOutDimCls = numel( this.db.cid2name ) + 1;
             dimCls = 1 : numOutDimCls;
-            dimDirTl = numOutDimCls + 0 + ( 1 : 4 );
-            dimDirBr = numOutDimCls + 4 + ( 1 : 4 );
+            dimDirTl = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
+            dimDirBr = numOutDimCls + 1 * numDirPerSide + ( 1 : numDirPerSide );
             output = gather( res( end - 1 ).x );
             gts = gather( gts );
             sid2isdir = logical( gts( 1, 1, 2, : ) );
@@ -331,7 +436,7 @@ classdef InOutAttNetCorner < handle
             errTl = ~bsxfun( @eq, ptl, gts( :, :, 2, sid2isdir ) );
             errTl = errTl( :, :, 1, : );
             errTl = sum( errTl( : ) );
-            pbr = output( :, :, dimDirTl, sid2isdir );
+            pbr = output( :, :, dimDirBr, sid2isdir );
             [ ~, pbr ] = sort( pbr, 3, 'descend' );
             errBr = ~bsxfun( @eq, pbr, gts( :, :, 3, sid2isdir ) );
             errBr = errBr( :, :, 1, : );
@@ -426,6 +531,10 @@ classdef InOutAttNetCorner < handle
             numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             bgdClsId = max( subTsDb.oid2cid ) + 1;
             dpid2dp = this.directions.dpid2dp;
+            numDirPerSide = 4;
+            dpidBasis = numDirPerSide .^ ( 1 : -1 : 0 );
+            dpidAllGo = dpidBasis * ( [ 2, 2 ]' - 1 ) + 1;
+            dpidAllStop = dpidBasis * ( [ 4, 4 ]' - 1 ) + 1;
             pairSize = size( dpid2dp, 1 );
             sid2iid = zeros( numSample, 1, 'single' );
             sid2tlbr = zeros( 4, numSample, 'single' );
@@ -439,7 +548,7 @@ classdef InOutAttNetCorner < handle
                 % Sample positive regions - for initial proposal.
                 for n = 1 : numGoSmaplePerObj,
                     if sid == numSample, break; end;
-                    dpid = 6;
+                    dpid = dpidAllGo;
                     flip = round( rand );
                     if flip,
                         regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
@@ -467,8 +576,8 @@ classdef InOutAttNetCorner < handle
                         dpid2posregns = subTsDb.oid2dpid2posregns{ oid };
                     end;
                     dpid2ok = ~cellfun( @isempty, dpid2posregns );
-                    dpid2ok( 6 ) = false;
-                    dpid2ok( end ) = false;
+                    dpid2ok( dpidAllGo ) = false;
+                    dpid2ok( dpidAllStop ) = false;
                     if sum( dpid2ok ),
                         dpid = find( dpid2ok );
                         dpid = dpid( ceil( numel( dpid ) * rand ) );
@@ -486,7 +595,7 @@ classdef InOutAttNetCorner < handle
                 % Sample positive regions - for stop.
                 for n = 1 : numStopSmaplePerObj,
                     if sid == numSample, break; end;
-                    dpid = 16;
+                    dpid = dpidAllStop;
                     flip = round( rand );
                     if flip,
                         regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
@@ -536,6 +645,8 @@ classdef InOutAttNetCorner < handle
             numSize = size( this.scales, 2 );
             numDirPair = size( this.directions.dpid2dp, 2 );
             dilate = this.settingTsDb.dilate;
+            numDirPerSide = 4;
+            dpidBasis = numDirPerSide .^ ( 1 : -1 : 0 )';
             domainWarp = [ this.patchSide; this.patchSide; ];
             % Parameters for positive mining.
             posIntOverRegnMoreThan = this.settingTsDb.posIntOverRegnMoreThan;       % A target object should be large enough.
@@ -615,7 +726,6 @@ classdef InOutAttNetCorner < handle
                         objRegns = oid2tlbr( :, oid );
                     end;
                     % Compute corner directions.
-                    dpidBasis = 4 .^ ( 1 : -1 : 0 );
                     tlbr = oid2tlbr( :, oid );
                     for r = 1 : size( objRegns, 2 ),
                         regnCurr = objRegns( :, r );
@@ -762,7 +872,6 @@ classdef InOutAttNetCorner < handle
         function res2 = forward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
-            numLy = 3;
             sid2isdir = logical( gt( 1, 1, 2, : ) );
             sid2isdir = sid2isdir( : );
             ycls = vl_nnsoftmaxloss...
@@ -771,29 +880,31 @@ classdef InOutAttNetCorner < handle
                 ( X( :, :, ly.dimDirTl, sid2isdir ), gt( :, :, 2, sid2isdir ) );
             ybr = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirBr, sid2isdir ), gt( :, :, 3, sid2isdir ) );
-            ydir = ( ytl + ybr ) * numel( sid2isdir ) / sum( sid2isdir ) / 2;
-            res2.x = [ ycls; ydir; ] / numLy;
+            ydir = ( ytl + ybr ) * ly.weiDirLoss / 2;
+            ydir = ydir * numel( sid2isdir ) / sum( sid2isdir );
+            ycls = ycls * ly.weiClsLoss;
+            res2.x = [ ycls; ydir; ];
         end
         % Majorly used in net, if a layer is custom. Backward function in output layer.
         function res1 = backward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
-            numLy = 3;
+            numDirPerSide = numel( ly.dimDirTl );
             sid2isdir = logical( gt( 1, 1, 2, : ) );
             sid2isdir = sid2isdir( : );
             bsize = numel( sid2isdir );
-            dzdyCls = res2.dzdx / numLy;
+            dzdyCls = res2.dzdx * ly.weiClsLoss;
             ycls = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimCls, : ), gt( :, :, 1, : ), dzdyCls );
-            dzdyTl = res2.dzdx / numLy;
+            dzdyTl = res2.dzdx * ly.weiDirLoss / 2;
             ytl_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirTl, sid2isdir ), gt( :, :, 2, sid2isdir ), dzdyTl );
-            ytl = gpuArray( zeros( 1, 1, 4, bsize, 'single' ) );
+            ytl = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             ytl( 1, 1, :, sid2isdir ) = ytl_; clear ytl_;
-            dzdyBr = res2.dzdx / numLy;
+            dzdyBr = res2.dzdx * ly.weiDirLoss / 2;
             ybr_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirBr, sid2isdir ), gt( :, :, 3, sid2isdir ), dzdyBr );
-            ybr = gpuArray( zeros( 1, 1, 4, bsize, 'single' ) );
+            ybr = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             ybr( 1, 1, :, sid2isdir ) = ybr_; clear ybr_;
             res1.dzdx = cat( 3, ycls, ytl, ybr );
         end
