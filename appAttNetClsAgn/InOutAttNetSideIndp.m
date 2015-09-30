@@ -33,7 +33,7 @@ classdef InOutAttNetSideIndp < handle
             this.settingTsDb.posIntOverRegnMoreThan             = 1 / 4;    % A target object should be large enough.
             this.settingTsDb.posIntOverTarObjMoreThan           = 0.99;     % A target object should be fully-included.
             this.settingTsDb.posIntOverSubObjMoreThan           = 0.7;      % A sub-object should be majorly-included. 
-            this.settingTsDb.posIntMajorityMoreThan             = 2;        % A target object should large enough w.r.t. the sub-objects. %%%%%%%%%%%%%%%%%%%%% Seems too large.
+            this.settingTsDb.posIntMajorityMoreThan             = 2;        % A target object should large enough w.r.t. the sub-objects.
             % Parameters for task specific db: negative mining.
             this.settingTsDb.negIntOverObjLessThan              = 0.1;      % Very small overlap is allowed for background region.
             % Parameters for task specific net.
@@ -41,6 +41,8 @@ classdef InOutAttNetSideIndp < handle
             pretrainedNet                                       = path.net.vgg_m;
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
+            this.settingTsNet.weightClassificationLoss          = 0.2;
+            this.settingTsNet.weightDirectionLoss               = 0.8;
             % Parameters to provide batches.
             this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.batchSize                       = 256;
@@ -61,15 +63,12 @@ classdef InOutAttNetSideIndp < handle
         function init( this )
             % Define directions.
             fprintf( '%s: Define directions.\n', upper( mfilename ) );
-            this.directions.did2vecT = [ [ 1; 0; ], [ 0; 0; ] ];
-            this.directions.did2vecL = [ [ 0; 1; ], [ 0; 0; ] ];
-            this.directions.did2vecB = - this.directions.did2vecT;
-            this.directions.did2vecR = - this.directions.did2vecL;
-            this.directions.dpid2dp = [ ...
-                1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2; ...
-                1, 1, 1, 1, 2, 2, 2, 2, 1, 1, 1, 1, 2, 2, 2, 2; ...
-                1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2; ...
-                1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2; ];
+            numDirPerSide = 2;
+            numSide = 4;
+            numPair = numDirPerSide ^ numSide;
+            dpid2dp = dec2base( ( 0 : numPair - 1 )', numDirPerSide, numSide )';
+            dpid2dp = mod( double( dpid2dp ), double( '0' ) - 1 );
+            this.directions.dpid2dp = dpid2dp;
             fprintf( '%s: Done.\n', upper( mfilename ) );
             % Determine patch stride and side.
             fprintf( '%s: Determine stride and patch side.\n', ...
@@ -307,9 +306,12 @@ classdef InOutAttNetSideIndp < handle
                 end;
             end
             % Initialize the output layer.
+            numDirPerSide = 2;
+            weightClassificationLoss = this.settingTsNet.weightClassificationLoss;
+            weightDirectionLoss = this.settingTsNet.weightDirectionLoss;
             filterChannel = size( layers{ end - 3 }.weights{ 1 }, 4 ); 
             numOutDimCls = numel( this.db.cid2name ) + 1;
-            numOutDim = numOutDimCls + 2 + 2 + 2 + 2;
+            numOutDim = numOutDimCls + 4 * numDirPerSide;
             weight = 0.01 * randn( 1, 1, filterChannel, numOutDim, 'single' );
             bias = zeros( 1, numOutDim, 'single' );
             layers{ end - 1 } = struct(...
@@ -326,10 +328,12 @@ classdef InOutAttNetSideIndp < handle
                 zeros( size( layers{ end - 1 }.weights{ 2 } ), 'single' );
             layers{ end }.type = 'custom';
             layers{ end }.dimCls = 1 : numOutDimCls;
-            layers{ end }.dimDirT = numOutDimCls + 0 + ( 1 : 2 );
-            layers{ end }.dimDirL = numOutDimCls + 2 + ( 1 : 2 );
-            layers{ end }.dimDirB = numOutDimCls + 4 + ( 1 : 2 );
-            layers{ end }.dimDirR = numOutDimCls + 6 + ( 1 : 2 );
+            layers{ end }.dimDirT = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.dimDirL = numOutDimCls + 1 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.dimDirB = numOutDimCls + 2 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.dimDirR = numOutDimCls + 3 * numDirPerSide + ( 1 : numDirPerSide );
+            layers{ end }.weiClsLoss = weightClassificationLoss;
+            layers{ end }.weiDirLoss = weightDirectionLoss;
             layers{ end }.forward = @InOutAttNetSideIndp.forward;
             layers{ end }.backward = @InOutAttNetSideIndp.backward;
             % Form the net in VGG style.
@@ -391,12 +395,13 @@ classdef InOutAttNetSideIndp < handle
         % For this target application, object detection, 
         % the metric is top-1 accuracy.
         function tsMetric = computeTsMetric( this, res, gts )
+            numDirPerSide = 2;
             numOutDimCls = numel( this.db.cid2name ) + 1;
             dimCls = 1 : numOutDimCls;
-            dimDirT = numOutDimCls + 0 + ( 1 : 2 );
-            dimDirL = numOutDimCls + 2 + ( 1 : 2 );
-            dimDirB = numOutDimCls + 4 + ( 1 : 2 );
-            dimDirR = numOutDimCls + 6 + ( 1 : 2 );
+            dimDirT = numOutDimCls + 0 * numDirPerSide + ( 1 : numDirPerSide );
+            dimDirL = numOutDimCls + 1 * numDirPerSide + ( 1 : numDirPerSide );
+            dimDirB = numOutDimCls + 2 * numDirPerSide + ( 1 : numDirPerSide );
+            dimDirR = numOutDimCls + 3 * numDirPerSide + ( 1 : numDirPerSide );
             output = gather( res( end - 1 ).x );
             gts = gather( gts );
             sid2isdir = logical( gts( 1, 1, 2, : ) );
@@ -518,6 +523,10 @@ classdef InOutAttNetSideIndp < handle
             numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
             bgdClsId = max( subTsDb.oid2cid ) + 1;
             dpid2dp = this.directions.dpid2dp;
+            numDirPerSide = 2;
+            dpidBasis = numDirPerSide .^ ( 3 : -1 : 0 );
+            dpidAllGo = dpidBasis * ( [ 1, 1, 1, 1 ]' - 1 ) + 1;
+            dpidAllStop = dpidBasis * ( [ 2, 2, 2, 2 ]' - 1 ) + 1;
             pairSize = size( dpid2dp, 1 );
             sid2iid = zeros( numSample, 1, 'single' );
             sid2tlbr = zeros( 4, numSample, 'single' );
@@ -531,7 +540,7 @@ classdef InOutAttNetSideIndp < handle
                 % Sample positive regions - for initial proposal.
                 for n = 1 : numGoSmaplePerObj,
                     if sid == numSample, break; end;
-                    dpid = 1;
+                    dpid = dpidAllGo;
                     flip = round( rand );
                     if flip,
                         regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
@@ -559,8 +568,8 @@ classdef InOutAttNetSideIndp < handle
                         dpid2posregns = subTsDb.oid2dpid2posregns{ oid };
                     end;
                     dpid2ok = ~cellfun( @isempty, dpid2posregns );
-                    dpid2ok( 1 ) = false;
-                    dpid2ok( end ) = false;
+                    dpid2ok( dpidAllGo ) = false;
+                    dpid2ok( dpidAllStop ) = false;
                     if sum( dpid2ok ),
                         dpid = find( dpid2ok );
                         dpid = dpid( ceil( numel( dpid ) * rand ) );
@@ -578,7 +587,7 @@ classdef InOutAttNetSideIndp < handle
                 % Sample positive regions - for stop.
                 for n = 1 : numStopSmaplePerObj,
                     if sid == numSample, break; end;
-                    dpid = 2 * 2 * 2 * 2;
+                    dpid = dpidAllStop;
                     flip = round( rand );
                     if flip,
                         regns = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
@@ -628,6 +637,8 @@ classdef InOutAttNetSideIndp < handle
             numSize = size( this.scales, 2 );
             numDirPair = size( this.directions.dpid2dp, 2 );
             dilate = this.settingTsDb.dilate;
+            numDirPerSide = 2;
+            dpidBasis = numDirPerSide .^ ( 3 : -1 : 0 )';
             domainWarp = [ this.patchSide; this.patchSide; ];
             % Parameters for positive mining.
             posIntOverRegnMoreThan = this.settingTsDb.posIntOverRegnMoreThan;       % A target object should be large enough.
@@ -707,7 +718,6 @@ classdef InOutAttNetSideIndp < handle
                         objRegns = oid2tlbr( :, oid );
                     end;
                     % Compute side directions.
-                    dpidBasis = 2 .^ ( 3 : -1 : 0 );
                     tlbr = oid2tlbr( :, oid );
                     for r = 1 : size( objRegns, 2 ),
                         regnCurr = objRegns( :, r );
@@ -856,7 +866,6 @@ classdef InOutAttNetSideIndp < handle
         function res2 = forward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
-            numLy = 5;
             sid2isdir = logical( gt( 1, 1, 2, : ) );
             sid2isdir = sid2isdir( : );
             ycls = vl_nnsoftmaxloss...
@@ -869,39 +878,41 @@ classdef InOutAttNetSideIndp < handle
                 ( X( :, :, ly.dimDirB, sid2isdir ), gt( :, :, 4, sid2isdir ) );
             yr = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirR, sid2isdir ), gt( :, :, 5, sid2isdir ) );
-            ydir = ( yt + yl + yb + yr ) * numel( sid2isdir ) / sum( sid2isdir ) / 4;
-            res2.x = [ ycls; ydir; ] / numLy;
+            ydir = ( yt + yl + yb + yr ) * ly.weiDirLoss / 4;
+            ydir = ydir * numel( sid2isdir ) / sum( sid2isdir );
+            ycls = ycls * ly.weiClsLoss;
+            res2.x = [ ycls; ydir; ];
         end
         % Majorly used in net, if a layer is custom. Backward function in output layer.
         function res1 = backward( ly, res1, res2 )
             X = res1.x;
             gt = ly.class;
-            numLy = 5;
+            numDirPerSide = numel( ly.dimDirT );
             sid2isdir = logical( gt( 1, 1, 2, : ) );
             sid2isdir = sid2isdir( : );
             bsize = numel( sid2isdir );
-            dzdyCls = res2.dzdx / numLy;
+            dzdyCls = res2.dzdx * ly.weiClsLoss;
             ycls = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimCls, : ), gt( :, :, 1, : ), dzdyCls );
-            dzdyT = res2.dzdx / numLy;
+            dzdyT = res2.dzdx * ly.weiDirLoss / 4;
             yt_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirT, sid2isdir ), gt( :, :, 2, sid2isdir ), dzdyT );
-            yt = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
+            yt = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yt( 1, 1, :, sid2isdir ) = yt_; clear yt_;
-            dzdyL = res2.dzdx / numLy;
+            dzdyL = res2.dzdx * ly.weiDirLoss / 4;
             yl_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirL, sid2isdir ), gt( :, :, 3, sid2isdir ), dzdyL );
-            yl = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
+            yl = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yl( 1, 1, :, sid2isdir ) = yl_; clear yl_;
-            dzdyB = res2.dzdx / numLy;
+            dzdyB = res2.dzdx * ly.weiDirLoss / 4;
             yb_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirB, sid2isdir ), gt( :, :, 4, sid2isdir ), dzdyB );
-            yb = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
+            yb = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yb( 1, 1, :, sid2isdir ) = yb_; clear yb_;
-            dzdyR = res2.dzdx / numLy;
+            dzdyR = res2.dzdx * ly.weiDirLoss / 4;
             yr_ = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimDirR, sid2isdir ), gt( :, :, 5, sid2isdir ), dzdyR );
-            yr = gpuArray( zeros( 1, 1, 2, bsize, 'single' ) );
+            yr = gpuArray( zeros( 1, 1, numDirPerSide, bsize, 'single' ) );
             yr( 1, 1, :, sid2isdir ) = yr_; clear yr_;
             res1.dzdx = cat( 3, ycls, yt, yl, yb, yr );
         end
