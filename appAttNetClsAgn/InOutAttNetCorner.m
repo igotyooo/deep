@@ -41,8 +41,8 @@ classdef InOutAttNetCorner < handle
             pretrainedNet                                       = path.net.vgg_m;
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
-            this.settingTsNet.weightClassificationLoss          = 0.2;
-            this.settingTsNet.weightDirectionLoss               = 0.8;
+            this.settingTsNet.weightClassificationLoss          = 1 / 3;
+            this.settingTsNet.weightDirectionLoss               = 2 / 3;
             % Parameters to provide batches.
             this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.batchSize                       = 256;
