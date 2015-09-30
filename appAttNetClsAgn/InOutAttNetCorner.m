@@ -734,8 +734,8 @@ classdef InOutAttNetCorner < handle
                                 getGtCornerDirection( regnCurr, tlbr, this.directions.did2vecTl, this.directions.did2vecBr, directionVectorMagnitude, domainWarp );
                             if didTl == numDirPerSide, regnCurr( 1 : 2 ) = tlbr( 1 : 2 ); end;
                             if didBr == numDirPerSide, regnCurr( 3 : 4 ) = tlbr( 3 : 4 ); end;
-                            dpid = dpidBasis * ( [ didTl, didBr ] - 1 ) + 1;
-                            dpidFlip = dpidBasis * ( [ didTlFlip, didBrFlip ] - 1 ) + 1;
+                            dpid = dpidBasis * ( [ didTl; didBr; ] - 1 ) + 1;
+                            dpidFlip = dpidBasis * ( [ didTlFlip; didBrFlip; ] - 1 ) + 1;
                             regn = round( regnCurr );
                             oid2dpid2posregns{ oid }{ dpid } = [ oid2dpid2posregns{ oid }{ dpid }, regn ];
                             oid2dpid2posregnsFlip{ oid }{ dpidFlip } = [ oid2dpid2posregnsFlip{ oid }{ dpidFlip }, regn ];
