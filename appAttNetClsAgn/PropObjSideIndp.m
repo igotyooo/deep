@@ -97,9 +97,14 @@ classdef PropObjSideIndp < handle
                 save( fpath, 'prop' );
             end;
             if nargout,
-                % Compute each region score.
+                % Set parameters.
                 weightCls = 1 / 2;
                 weightDir = 1 / 2;
+                signDirGo = 1;
+                signClsBgd = this.db.getNumClass + 1;
+                thrshCls = -Inf;
+                thrshDir = 1.3; 0.5; -Inf; 1.5; 
+                % Do the job.
                 dimCls = this.attNet.layers{ end }.dimCls;
                 dimDirT = this.attNet.layers{ end }.dimDirT;
                 dimDirL = this.attNet.layers{ end }.dimDirL;
@@ -120,21 +125,16 @@ classdef PropObjSideIndp < handle
                     max( rid2outDirB, [  ], 1 );
                 [ rid2scoreDirR, rid2cidDirR ] = ...
                     max( rid2outDirR, [  ], 1 );
-                rid2okCls = rid2cidCls ~= numel( dimCls );
-                rid2okDirT = rid2cidDirT == 1;
-                rid2okDirL = rid2cidDirL == 1;
-                rid2okDirB = rid2cidDirB == 1;
-                rid2okDirR = rid2cidDirR == 1;
-                
-                thrshCls = -Inf; 10; 
+                rid2okCls = rid2cidCls ~= signClsBgd;
+                rid2okDirT = rid2cidDirT == signDirGo;
+                rid2okDirL = rid2cidDirL == signDirGo;
+                rid2okDirB = rid2cidDirB == signDirGo;
+                rid2okDirR = rid2cidDirR == signDirGo;
                 rid2okCls = rid2okCls & ( rid2scoreCls > thrshCls );
-                
-                thrshDir = 1.3; 1; 0.9; -Inf; 
                 rid2okDirT = rid2okDirT & ( rid2scoreDirT > thrshDir );
                 rid2okDirL = rid2okDirL & ( rid2scoreDirL > thrshDir );
                 rid2okDirB = rid2okDirB & ( rid2scoreDirB > thrshDir );
                 rid2okDirR = rid2okDirR & ( rid2scoreDirR > thrshDir );
-                
                 rid2ok = rid2okCls & ...
                     rid2okDirT & rid2okDirL & rid2okDirB & rid2okDirR;
                 rid2scoreCls = rid2scoreCls( rid2ok ) * 2 - sum( rid2outCls( :, rid2ok ), 1 );
