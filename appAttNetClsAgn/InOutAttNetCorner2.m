@@ -758,8 +758,10 @@ classdef InOutAttNetCorner2 < handle
                 sid2nregns = cell( numSize, 1 );
                 for sid = 1 : numSize,
                     nrids = find( nrid2tlbr( 5, : ) == sid );
-                    nrids = randsample( nrids, min( numel( nrids ), numMaxRegnPerSize ) );
-                    sid2nregns{ sid } = nrid2tlbr( 1 : 4, nrids );
+                    if ~isempty( nrids ),
+                        nrids = randsample( nrids, min( numel( nrids ), numMaxRegnPerSize ) ); 
+                        sid2nregns{ sid } = nrid2tlbr( 1 : 4, nrids );
+                    end;
                 end;
                 % Accumulate results.
                 newoids = ( newoid : newoid + numObj - 1 )';
