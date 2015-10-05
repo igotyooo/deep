@@ -152,28 +152,34 @@ classdef Net < handle
         % 3. FETCH THE BEST NETWORK.
         function fetchBestNet( this )
             epch2perf = this.eid2metricVal;
-            [ bestMetric, bestEpch ] = min( epch2perf );
-            bestTsMetricVal = epch2perf( bestEpch );
-            tsMetricName = this.inout.getTsMetricName;
-            fprintf( ...
-                '%s: Load net of epch %d. (%s of %.4f)\n', ...
-                upper( mfilename ), ...
-                bestEpch, ...
-                upper( tsMetricName ), ...
-                bestTsMetricVal );
-            this.loadNetAt( bestEpch );
-            this.currentEpch = bestEpch;
-            fprintf( '%s: Fetch done.\n', ...
-                upper( mfilename ) );
-            figure;
-            plot( 1 : numel( epch2perf ), epch2perf, 'b.-' ); hold on;
-            plot( bestEpch, bestMetric, 'ro' ); hold off;
-            set( gcf, 'color', 'w' );
-            xlabel( 'Epoch' );
-            ylabel( tsMetricName );
-            title( 'Network selection' );
-            legend( { 'Val', 'Net selected' } );
-            grid on; hold off;
+            numMetric = size( epch2perf, 1 );
+            if numMetric == 1,
+                [ bestMetric, bestEpch ] = min( epch2perf );
+                bestTsMetricVal = epch2perf( bestEpch );
+                tsMetricName = this.inout.getTsMetricName;
+                tsMetricName = tsMetricName{ : };
+                fprintf( ...
+                    '%s: Load net of epch %d. (%s of %.4f)\n', ...
+                    upper( mfilename ), ...
+                    bestEpch, ...
+                    upper( tsMetricName ), ...
+                    bestTsMetricVal );
+                this.loadNetAt( bestEpch );
+                this.currentEpch = bestEpch;
+                fprintf( '%s: Fetch done.\n', ...
+                    upper( mfilename ) );
+                figure;
+                plot( 1 : numel( epch2perf ), epch2perf, 'b.-' ); hold on;
+                plot( bestEpch, bestMetric, 'ro' ); hold off;
+                set( gcf, 'color', 'w' );
+                xlabel( 'Epoch' );
+                ylabel( tsMetricName );
+                title( 'Network selection' );
+                legend( { 'Val', 'Net selected' } );
+                grid on; hold off;
+            else
+                fprintf( '%s: Cannot choose the best.\n', upper( mfilename ) );
+            end;
         end
         % 4. PROVIDE CURRENT NETWORK.
         function [ net, netName ] = provdNet( this )
