@@ -1,8 +1,7 @@
 %% SET PARAMETERS ONLY.
 clc; close all; fclose all; clear all; 
-gpuDevice( 2 ); reset( gpuDevice );
 addpath( genpath( '..' ) ); init;
-setting.useGpu                          = true;
+setting.gpus                            = 1;
 setting.db                              = path.db.ddsm;
 setting.cnn                             = path.net.ddsm;
 setting.neuralRegnDesc.layerId          = 19;
@@ -33,22 +32,23 @@ setting.map.post.cid2scaling            = [ 1.7; 1; 0 ];
 setting.map.post.mapMaxVal              = 17;
 setting.map.post.mapThrsh               = 5;
 %% DO THE JOB.
+reset( gpuDevice( setting.gpus ) );
 db = Db( setting.db, path.dstDir );
 db.genDb;
 db = db.mergeCls( { [ 1, 4 ]; [ 2, 5 ]; [ 3, 6 ]; }, 'DDSM_BCN' );
 cnn = load( setting.cnn.path );
 cnn.name = setting.cnn.name;
 neuralRegnDscrber = ...
-    NeuralRegnDscrberMammo( db, cnn, ...
+    NeuralRegnDscrber( db, cnn, ...
     setting.neuralRegnDesc, ...
-    setting.neuralRegnDic, setting.useGpu );
-neuralRegnDscrber.init;
+    setting.neuralRegnDic );
+neuralRegnDscrber.init( setting.gpus );
 neuralRegnDscrber.trainDic;
 % neuralRegnDscrber.descDb;
 fisher = FisherMammo( neuralRegnDscrber, setting.fisher );
 imDscrber = ImDscrber( db, { fisher }, [  ] );
 imDscrber.descDb;
-svm = SvmBch( db, imDscrber, setting.svm );
+svm = Svm( db, imDscrber, setting.svm );
 svm.trainSvm;
 svm.evalSvm( 'visionresearchreport@gmail.com' );
 map = Map( db, svm, setting.map.pre, setting.map.post );
