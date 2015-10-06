@@ -36,6 +36,7 @@ classdef InOutAttNetCornerPerCls < handle
             pretrainedNet                                       = path.net.vgg_m;
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
+            this.settingTsNet.normalizeClassQuantity            = false;
             % Parameters to provide batches.
             this.settingGeneral.shuffleSequance                 = false;
             this.settingGeneral.batchSize                       = 256;
@@ -72,7 +73,8 @@ classdef InOutAttNetCornerPerCls < handle
             % Determine patch stride and side.
             fprintf( '%s: Determine stride and patch side.\n', ...
                 upper( mfilename ) );
-            net = this.provdInitNet;
+            preTrainedNetPath = this.settingTsNet.pretrainedNetPath;
+            net = load( preTrainedNetPath );
             [ this.patchSide, this.stride ] = ...
                 getNetProperties( net, numel( net.layers ) - 1 );
             this.numChannel = size( net.layers{ 1 }.weights{ 1 }, 3 );
@@ -246,11 +248,13 @@ classdef InOutAttNetCornerPerCls < handle
             batchSize = this.settingGeneral.batchSize;
             if isempty( this.poolTr.sid2iid ),
                 % Make training pool to be consumed in an epoch.
+                fprintf( '%s: Make tr seq in an epch.\n', upper( mfilename ) );
                 [   this.poolTr.sid2iid, ...
                     this.poolTr.sid2tlbr, ...
                     this.poolTr.sid2flip, ...
                     this.poolTr.sid2gt ] = ...
                     this.getRegnSeqInEpch( 1 );
+                fprintf( '%s: Done.\n', upper( mfilename ) );
             end;
             batchSmpl = ( labindex : numlabs : batchSize )';
             sid2iid = this.poolTr.sid2iid( batchSmpl );
@@ -269,11 +273,13 @@ classdef InOutAttNetCornerPerCls < handle
             batchSize = this.settingGeneral.batchSize;
             if isempty( this.poolVal.sid2iid ),
                 % Make validation pool to be consumed in an epoch.
+                fprintf( '%s: Make val seq in an epch.\n', upper( mfilename ) );
                 [   this.poolVal.sid2iid, ...
                     this.poolVal.sid2tlbr, ...
                     this.poolVal.sid2flip, ...
                     this.poolVal.sid2gt ] = ...
                     this.getRegnSeqInEpch( 2 );
+                fprintf( '%s: Done.\n', upper( mfilename ) );
             end;
             batchSmpl = ( labindex : numlabs : batchSize )';
             sid2iid = this.poolVal.sid2iid( batchSmpl );
@@ -322,6 +328,7 @@ classdef InOutAttNetCornerPerCls < handle
                 end;
             end
             % Initialize the output layer.
+            normalizeClassQuantity = this.settingTsNet.normalizeClassQuantity;
             numDirPerSide = 4;
             filterChannel = size( layers{ end - 3 }.weights{ 1 }, 4 );
             numClass = numel( this.db.cid2name );
@@ -343,6 +350,21 @@ classdef InOutAttNetCornerPerCls < handle
             layers{ end }.type = 'custom';
             layers{ end }.forward = @InOutAttNetCornerPerCls.forward;
             layers{ end }.backward = @InOutAttNetCornerPerCls.backward;
+            if normalizeClassQuantity,
+                fprintf( '%s: Make tr seq in an epch.\n', upper( mfilename ) );
+                [   this.poolTr.sid2iid, ...
+                    this.poolTr.sid2tlbr, ...
+                    this.poolTr.sid2flip, ...
+                    this.poolTr.sid2gt, ...
+                    stats ] = this.getRegnSeqInEpch( 1 );
+                fprintf( '%s: Done.\n', upper( mfilename ) );
+                wei = 1 ./ stats;
+                wei = wei * numOutDim / sum( wei );
+                wei = reshape( wei, [ 1, 1, numOutDim ] );
+            else
+                wei = ones( 1, 1, numOutDim, 'single' );
+            end;
+            layers{ end }.wei = wei;
             % Form the net in VGG style.
             net.layers = layers;
             net.normalization.averageImage = [  ];
@@ -496,7 +518,7 @@ classdef InOutAttNetCornerPerCls < handle
             % Merge ground-truths into a same shape of net output.
             gts = reshape( sid2gt, [ 1, 1, size( sid2gt, 1 ), numSmpl ] );
         end
-        function [ sid2iid, sid2tlbr, sid2flip, sid2gt ] = ...
+        function [ sid2iid, sid2tlbr, sid2flip, sid2gt, stats ] = ...
                 getRegnSeqInEpch( this, setid )
             rng( 'shuffle' );
             shuffleSequance = this.settingGeneral.shuffleSequance;
@@ -619,6 +641,16 @@ classdef InOutAttNetCornerPerCls < handle
                 sid2iid = sid2iid( sids );
                 sid2tlbr = sid2tlbr( :, sids );
                 sid2gt = sid2gt( :, sids );
+            end;
+            if nargout > 4,
+                numDimPerLyr = 5;
+                numLyr = this.db.getNumClass * 2;
+                numOutDim = numLyr * numDimPerLyr;
+                sid2dim = bsxfun( @plus, ( 0 : numLyr - 1 )' * numDimPerLyr, sid2gt );
+                stats = zeros( numOutDim, 1, 'single' );
+                for sid = 1 : size( sid2gt, 2 ),
+                    stats( sid2dim( :, sid ) ) = stats( sid2dim( :, sid ) ) + 1;
+                end;
             end;
         end
         function subTsDb = makeSubTsDb( this, setid )
@@ -871,6 +903,7 @@ classdef InOutAttNetCornerPerCls < handle
                     ( X( :, :, dims : dime, : ), gt( :, :, lid, : ), dzdy );
                 y( :, :, dims : dime, : ) = y_;
             end;
+            y = bsxfun( @times, ly.wei, y );
             res1.dzdx = y;
         end
     end
