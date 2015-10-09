@@ -33,9 +33,6 @@ classdef InOutAttNetCornerPerCls2 < handle
             this.settingTsDb.negIntOverObjLessThan              = 0.1;      % Very small overlap is allowed for background region.
             % Parameters for task specific net.
             global path;
-            numCls = this.db.getNumClass;
-            numLyrCls = 1;
-            numLyrDir = numCls * 2;
             pretrainedNet                                       = path.net.vgg_m;
             this.settingTsNet.pretrainedNetName                 = pretrainedNet.name;
             this.settingTsNet.suppressPretrainedLayerLearnRate  = 1 / 10;
@@ -160,18 +157,17 @@ classdef InOutAttNetCornerPerCls2 < handle
                 tsdb = this.tsDb.val;
             end;
             bsize = this.settingGeneral.batchSize;
-            signFgd = 1;
-            signBgd = 2;
+            signBgd = this.db.getNumClass + 1;
             figure( fid );
             set( gcf, 'color', 'w' );
             for s = 1 : bsize,
                 im = ims( :, :, :, s );
                 gt = gts( :, :, :, s );
-                gt = gt( : ); % size of ( 1 + 1 ) * numClass + 1.
+                gt = gt( : ); % size of ( 1 + 1 ) * numClass + numClass.
                 lids = find( gt( 1 : end - 1 ) ~= 0 );
                 if ~isempty( lids ), 
-                    if gt( end ) ~= signFgd, error( 'Wrong fgd/bgd label.' ); end;
                     cid = lids( 2 ) / 2;
+                    if gt( end ) ~= cid, error( 'Wrong fgd/bgd label.' ); end;
                     cname = this.db.cid2name{ cid };
                     gtDir = gt( lids );
                     switch gtDir( 1 )
@@ -198,6 +194,7 @@ classdef InOutAttNetCornerPerCls2 < handle
                 subplot( 1, 2, 1 );
                 plottlbr( this.db.oid2bbox( :, this.db.iid2oids{ iid } ), this.db.iid2impath{ iid }, false, 'r' );
                 title( 'Ground-truth' );
+                hold off;
                 subplot( 1, 2, 2 );
                 imshow( im ); title( sprintf( '%s, %s/%s (%d/%d)', cname, dnameTl, dnameBr, s, bsize ) );
                 hold off;
@@ -333,12 +330,12 @@ classdef InOutAttNetCornerPerCls2 < handle
                 end;
             end
             % Initialize the output layer.
-            numDirPerSide = 4;
+            numDimPerDirLyr = 4;
+            numClass = this.db.getNumClass;
+            numDimDir = numClass * ( numDimPerDirLyr * 2 );
+            numDimCls = numClass + 1;
+            numOutDim = numDimDir + numDimCls;
             filterChannel = size( layers{ end - 3 }.weights{ 1 }, 4 );
-            numClass = numel( this.db.cid2name );
-            numOutDimDir = numClass * ( numDirPerSide * 2 );
-            numOutDimCls = 2;
-            numOutDim = numOutDimDir + numOutDimCls;
             weight = 0.01 * randn( 1, 1, filterChannel, numOutDim, 'single' );
             bias = zeros( 1, numOutDim, 'single' );
             layers{ end - 1 } = struct(...
@@ -354,8 +351,8 @@ classdef InOutAttNetCornerPerCls2 < handle
             layers{ end - 1 }.momentum{ 2 } = ...
                 zeros( size( layers{ end - 1 }.weights{ 2 } ), 'single' );
             layers{ end }.type = 'custom';
-            layers{ end }.dimDir = 1 : numOutDimDir;
-            layers{ end }.dimCls = numOutDimDir + 1 : numOutDimDir + numOutDimCls;
+            layers{ end }.dimDir = 1 : numDimDir;
+            layers{ end }.dimCls = numDimDir + ( 1 : numDimCls );
             layers{ end }.forward = @InOutAttNetCornerPerCls2.forward;
             layers{ end }.backward = @InOutAttNetCornerPerCls2.backward;
             % Form the net in VGG style.
@@ -377,7 +374,10 @@ classdef InOutAttNetCornerPerCls2 < handle
                 net.classes.name{ end + 1, 1 } = sprintf( 'cls: %s, bottom-right: go to left', cname );
                 net.classes.name{ end + 1, 1 } = sprintf( 'cls: %s, bottom-right: stop', cname );
             end;
-            net.classes.name{ end + 1, 1 } = 'foreground';
+            for cid = 1 : numClass,
+                cname = this.db.cid2name{ cid };
+                net.classes.name{ end + 1, 1 } = cname;
+            end;
             net.classes.name{ end + 1, 1 } = 'background';
             net.classes.description = net.classes.name;
             netName = this.getTsNetName;
@@ -424,7 +424,7 @@ classdef InOutAttNetCornerPerCls2 < handle
             output = gather( res( end - 1 ).x );
             gts = gather( gts );
             % Compute direction error.
-            signFgd = 1;
+            signBgd = this.db.getNumClass + 1;
             numDimPerDirLyr = 4;
             numLyr = size( gts, 3 );
             numDirLyr = numLyr - 1;
@@ -446,7 +446,7 @@ classdef InOutAttNetCornerPerCls2 < handle
                     errDir = errDir + e;
                 end
             end;
-            errDir = errDir * ( size( gts, 4 ) / sum( gts( :, :, end, : ) == signFgd ) ); % Normalization of the # of samples.
+            errDir = errDir * ( size( gts, 4 ) / sum( gts( :, :, end, : ) ~= signBgd ) ); % Normalization of the # of samples.
             errDir = errDir / 2; % Normalization in Eq (2).
             % Compute classification error.
             numDimClsLyr = 2;
@@ -542,8 +542,7 @@ classdef InOutAttNetCornerPerCls2 < handle
             numObj = numel( subTsDb.oid2iid );
             numAugPerObj = this.getNumSamplePerObj;
             numSample = ceil( numObj * numAugPerObj / batchSize ) * batchSize;
-            fgdClsId = 1;
-            bgdClsId = 2;
+            bgdClsId = this.db.getNumClass + 1;
             dpid2dp = this.directions.dpid2dp;
             numDirPerSide = 4;
             dpidBasis = numDirPerSide .^ ( 1 : -1 : 0 );
@@ -579,7 +578,7 @@ classdef InOutAttNetCornerPerCls2 < handle
                         sid2tlbr( :, sid ) = regns( :, ridx );
                         sid2flip( sid ) = flip;
                         sid2gt( lids, sid ) = dpid2dp( :, dpid );
-                        sid2gt( end, sid ) = fgdClsId;
+                        sid2gt( end, sid ) = cid;
                     end;
                 end;
                 if sid == numSample, break; end;
@@ -606,7 +605,7 @@ classdef InOutAttNetCornerPerCls2 < handle
                         sid2tlbr( :, sid ) = regns( :, ridx );
                         sid2flip( sid ) = flip;
                         sid2gt( lids, sid ) = dpid2dp( :, dpid );
-                        sid2gt( end, sid ) = fgdClsId;
+                        sid2gt( end, sid ) = cid;
                     end;
                 end;
                 if sid == numSample, break; end;
@@ -628,7 +627,7 @@ classdef InOutAttNetCornerPerCls2 < handle
                         sid2tlbr( :, sid ) = regns( :, ridx );
                         sid2flip( sid ) = flip;
                         sid2gt( lids, sid ) = dpid2dp( :, dpid );
-                        sid2gt( end, sid ) = fgdClsId;
+                        sid2gt( end, sid ) = cid;
                     end;
                 end;
                 if sid == numSample, break; end;
@@ -884,7 +883,7 @@ classdef InOutAttNetCornerPerCls2 < handle
             % Ldir = ( ( Ytl ~= 0 ) * Ltl + ( Ybr ~= 0 ) * Lbr ) / 2.   ---(2)
             X = res1.x;
             gt = ly.class;
-            signFgd = 1;
+            signBgd = numel( ly.dimCls );
             numDimPerDirLyr = 4;
             numLyr = size( gt, 3 );
             numDirLyr = numLyr - 1;
@@ -905,7 +904,7 @@ classdef InOutAttNetCornerPerCls2 < handle
             end;
             ycls = vl_nnsoftmaxloss...
                 ( X( :, :, ly.dimCls, : ), gt( :, :, end, : ) );
-            ydir = ydir * ( size( gt, 4 ) / sum( gt( :, :, end, : ) == signFgd ) ); % Normalization of the # of samples.
+            ydir = ydir * ( size( gt, 4 ) / sum( gt( :, :, end, : ) ~= signBgd ) ); % Normalization of the # of samples.
             ydir = ydir / 2; % Normalization in Eq (2).
             ydir = ydir * 2 / 3; % Balancing in Eq (1).
             ycls = ycls / 3; % Balancing in Eq (1).
