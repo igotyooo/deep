@@ -428,6 +428,7 @@ classdef InOutAttNetCornerPerCls2 < handle
             numDimPerDirLyr = 4;
             numLyr = size( gts, 3 );
             numDirLyr = numLyr - 1;
+            dimClsLyr = numDirLyr * numDimPerDirLyr + ( 1 : signBgd );
             errDir = 0;
             for lid = 1 : numDirLyr,
                 sid2istar = logical( gts( :, :, lid, : ) );
@@ -449,8 +450,7 @@ classdef InOutAttNetCornerPerCls2 < handle
             errDir = errDir * ( size( gts, 4 ) / sum( gts( :, :, end, : ) ~= signBgd ) ); % Normalization of the # of samples.
             errDir = errDir / 2; % Normalization in Eq (2).
             % Compute classification error.
-            numDimClsLyr = 2;
-            p = output( :, :, ( end - numDimClsLyr + 1 ) : end, : );
+            p = output( :, :, dimClsLyr, : );
             [ ~, p ] = sort( p, 3, 'descend' );
             e = ~bsxfun( @eq, p, gts( :, :, end, : ) );
             e = e( :, :, 1, : );
