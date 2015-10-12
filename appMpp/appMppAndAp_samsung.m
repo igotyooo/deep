@@ -1,7 +1,7 @@
 %% SET PARAMETERS ONLY.
 clc; close all; fclose all; clear all; 
 addpath( genpath( '..' ) ); init;
-setting.gpu                             = 1;
+setting.gpu                             = 2;
 setting.db                              = path.db.indoor_devices;
 setting.net                             = path.net.vgg_m;
 setting.neuralRegnDesc.layerId          = 19;
@@ -29,6 +29,7 @@ setting.svm.biasLearningRate            = 0.5;
 setting.svm.loss                        = 'HINGE';
 setting.svm.solver                      = 'SDCA';
 
+
 %% DO THE JOB.
 reset( gpuDevice( setting.gpu ) );
 db = Db( setting.db, path.dstDir );
@@ -51,14 +52,14 @@ svm = Svm( db, imDscrber, setting.svm );
 svm.trainSvm;
 svm.evalSvm( 'visionresearchreport@gmail.com' );
 
-%% CONFUSION METRIX.
+%% RESULT: CONFUSION METRIX.
 clc; close all;
 clearvars -except db fisher imDscrber net neuralDesc neuralRegnDscrber path setting svm;
 confMat = svm.result.confMat;
 imagesc( confMat );  colorbar;
 set( gcf, 'color', 'w' );
 
-%% EXAMPLES.
+%% RESULT: EXAMPLES.
 clc; clearvars -except db fisher imDscrber net neuralDesc neuralRegnDscrber path setting svm;
 cid = 7;
 topn = 3;
@@ -83,7 +84,7 @@ cid2name = { 'AIR'; 'LI(OFF)'; 'LI(ON)'; 'REF'; 'TV(OFF)'; 'TV(ON)'; 'WASH' };
 set( gca, 'XTick', 1 : topn, 'XTickLabel', cid2name( rank2cid( 1 : topn ) ) );
 set( gcf, 'Color', 'w' );
 
-%% SPEED.
+%% RESULT: SPEED.
 numIm = 10;
 t = 0;
 for iid = 1 : numIm;
@@ -93,7 +94,5 @@ for iid = 1 : numIm;
     t = t + toc( it );
 end;
 t / numIm;
-
-
 
 
