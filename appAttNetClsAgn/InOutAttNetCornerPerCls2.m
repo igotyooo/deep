@@ -26,6 +26,7 @@ classdef InOutAttNetCornerPerCls2 < handle
             % Parameters for task specific db.
             this.settingTsDb.numScaling                         = 256;
             this.settingTsDb.dilate                             = 1 / 4;
+            this.settingTsDb.normalizeImageMaxSide              = 0;
             % Parameters for task specific db: positive mining.
             this.settingTsDb.posGotoMargin                      = 2;        % [ pix/pix ]
             this.settingTsDb.numQuantizeBetweenStopAndGoto      = 3;
@@ -101,9 +102,20 @@ classdef InOutAttNetCornerPerCls2 < handle
                 fprintf( '%s: Determine scaling factors.\n', ...
                     upper( mfilename ) );
                 posGotoMargin = this.settingTsDb.posGotoMargin;
-                posIntOverRegnMoreThan = 1 / ( posGotoMargin ^ 2 );
+                maxSide = this.settingTsDb.normalizeImageMaxSide;
                 numScaling = this.settingTsDb.numScaling;
-                oid2tlbr = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == 1 );
+                posIntOverRegnMoreThan = 1 / ( posGotoMargin ^ 2 );
+                setid = 1;
+                oid2tlbr = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == setid );
+                if maxSide,
+                    oid2iid = this.db.oid2iid( this.db.iid2setid( this.db.oid2iid ) == setid );
+                    oid2imsize = this.db.iid2size( :, oid2iid );
+                    numRegn = size( oid2tlbr, 2 );
+                    for oid = 1 : numRegn,
+                        [ ~, oid2tlbr( :, oid ) ] = normalizeImageSize...
+                            ( maxSide, oid2imsize( :, oid ), oid2tlbr( :, oid ) );
+                    end;
+                end;
                 referenceSide = this.patchSide * sqrt( posIntOverRegnMoreThan );
                 [ scalesRow, scalesCol ] = determineImageScaling...
                     ( oid2tlbr, numScaling, referenceSide, true );
@@ -668,6 +680,7 @@ classdef InOutAttNetCornerPerCls2 < handle
             domainWarp = [ this.patchSide; this.patchSide; ];
             % Parameters for positive mining.
             posGotoMargin = this.settingTsDb.posGotoMargin;
+            maxSide = this.settingTsDb.normalizeImageMaxSide;
             numQtz = this.settingTsDb.numQuantizeBetweenStopAndGoto;
             step = sqrt( ( posGotoMargin ) ^ ( 2 / ( numQtz + 1 ) ) );
             numMaxRegionPerDirectionPair = 16;
@@ -760,14 +773,16 @@ classdef InOutAttNetCornerPerCls2 < handle
                 % end;
                 % Negative mining.
                 imSize0 = this.db.iid2size( :, iid );
-                sid2size = round( bsxfun( @times, this.scales, imSize0 ) );
+                if maxSide, imSize = normalizeImageSize( maxSide, imSize0 ); else imSize = imSize0; end;
+                sid2size = round( bsxfun( @times, this.scales, imSize ) );
                 rid2tlbr = ...
                     extractDenseRegions( ...
-                    imSize0, ...
+                    imSize, ...
                     sid2size, ...
                     this.patchSide, ...
                     this.stride, ...
                     dilate );
+                rid2tlbr = round( resizeTlbr( rid2tlbr, imSize, imSize0 ) );
                 if isempty( rid2tlbr ), rid2rect = zeros( 5, 0 ); rid2tlbr = zeros( 5, 0 );
                 else rid2rect = tlbr2rect( rid2tlbr ); end;
                 oid2rect = tlbr2rect( oid2tlbr );
@@ -827,11 +842,12 @@ classdef InOutAttNetCornerPerCls2 < handle
         function name = getScaleFactorName( this )
             numScaling = this.settingTsDb.numScaling;
             posGotoMargin = this.settingTsDb.posGotoMargin;
+            maxSide = this.settingTsDb.normalizeImageMaxSide;
             piormt = 1 / ( posGotoMargin ^ 2 );
             piormt = num2str( piormt );
             piormt( piormt == '.' ) = 'P';
-            name = sprintf( 'SFTR_N%03d_PIORMT%s_OF_%s', ...
-                numScaling, piormt, this.db.getName );
+            name = sprintf( 'SFTR_N%03d_PIORMT%s_NIMS%d_OF_%s', ...
+                numScaling, piormt, maxSide, this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
