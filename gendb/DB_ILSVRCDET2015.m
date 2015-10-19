@@ -68,6 +68,7 @@ function [  cid2name, ...
         end;
     end;
     iid2impath = iid2impath( iid2pos );
+    iid2setid = iid2setid( iid2pos );
     iid2numObj = iid2numObj( iid2pos );
     iid2size = iid2size( :, iid2pos );
     oid2wnid = oid2wnid( iid2pos );
