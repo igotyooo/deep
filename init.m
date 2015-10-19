@@ -2,7 +2,7 @@
 % Set lib path only.
 global path;
 path.lib.matConvNet                     = '/iron/lib/matconvnet_v1.0_beta12/';
-path.lib.ilsvrcDevKit                   = '/iron/lib/ILSVRC2014_devkit/';
+path.lib.ilsvrcDevKit                   = '/iron/lib/ILSVRC2015_devkit/devkit/';
 path.lib.vlfeat                         = '/iron/lib/vlfeat/vlfeat-0.9.19/';
 path.lib.jsgd                           = '/iron/lib/jsgd-61/';
 path.lib.selectiveSearch                = '/iron/lib/selectiveSearch/SelectiveSearchCodeIJCV/';
@@ -15,9 +15,9 @@ path.db.voc2007.root                    = '/iron/db/VOC2007';
 path.db.coco2014.name                   = 'COCO2014';
 path.db.coco2014.funh                   = @DB_COCO2014;
 path.db.coco2014.root                   = '/iron/db/COCO2014';
-path.db.ilsvrcdet2014.name              = 'ILSVRCDET2014';
-path.db.ilsvrcdet2014.funh              = @DB_ILSVRCDET2014;
-path.db.ilsvrcdet2014.root              = '/iron/db/ILSVRCDET2014';
+path.db.ilsvrcdet2015.name              = 'ILSVRCDET2015';
+path.db.ilsvrcdet2015.funh              = @DB_ILSVRCDET2015;
+path.db.ilsvrcdet2015.root              = '/iron/db/ILSVRC2015';
 path.db.ddsm.name                       = 'DDSM';
 path.db.ddsm.funh                       = @DB_DDSM;
 path.db.ddsm.root                       = '/iron/db/DDSM';
