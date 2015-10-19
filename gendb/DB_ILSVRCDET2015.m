@@ -16,7 +16,6 @@ function [  cid2name, ...
     fclose( fp );
     iid2imnameTr = iid2imnameTr{ 1 };
     iid2impathTr = fullfile( dirRoot, 'Data/DET/train', iid2imnameTr );
-    iid2impathTr = cellfun( @( x )strcat( x, '.JPEG' ), iid2impathTr, 'UniformOutput', false );
     iid2annopathTr = fullfile( dirRoot, 'Annotations/DET/train', iid2imnameTr );
     fprintf( 'Done.\n' );
     fprintf( 'Read validation image list.\n' );
@@ -25,7 +24,6 @@ function [  cid2name, ...
     fclose( fp );
     iid2imnameVal = iid2imnameVal{ 1 };
     iid2impathVal = fullfile( dirRoot, 'Data/DET/val', iid2imnameVal );
-    iid2impathVal = cellfun( @( x )strcat( x, '.JPEG' ), iid2impathVal, 'UniformOutput', false );
     iid2annopathVal = fullfile( dirRoot, 'Annotations/DET/val', iid2imnameVal );
     fprintf( 'Done.\n' );
     fprintf( 'Form file path.\n' );
