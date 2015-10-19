@@ -15,23 +15,33 @@ function [  cid2name, ...
     iid2imnameTr = textscan( fp, '%s %d' );
     fclose( fp );
     iid2imnameTr = iid2imnameTr{ 1 };
-    iid2impathTr = fullfile( dirRoot, 'Data/DET/train', iid2imnameTr );
-    iid2annopathTr = fullfile( dirRoot, 'Annotations/DET/train', iid2imnameTr );
+    iid2impathTr = cell( size( iid2imnameTr ) );
+    iid2annopathTr = cell( size( iid2imnameTr ) );
+    parfor iid = 1 : numel( iid2imnameTr ),
+        iid2impathTr{ iid } = fullfile( dirRoot, 'Data/DET/train', iid2imnameTr{ iid } );
+        iid2annopathTr{ iid } = fullfile( dirRoot, 'Annotations/DET/train', iid2imnameTr{ iid } );
+    end;
     fprintf( 'Done.\n' );
     fprintf( 'Read validation image list.\n' );
     fp = fopen( fullfile( dirRoot, 'ImageSets/DET/val.txt' ), 'r' );
     iid2imnameVal = textscan( fp, '%s %d' );
     fclose( fp );
     iid2imnameVal = iid2imnameVal{ 1 };
-    iid2impathVal = fullfile( dirRoot, 'Data/DET/val', iid2imnameVal );
-    iid2annopathVal = fullfile( dirRoot, 'Annotations/DET/val', iid2imnameVal );
+    iid2impathVal = cell( size( iid2imnameVal ) );
+    iid2annopathVal = cell( size( iid2imnameVal ) );
+    parfor iid = 1 : numel( iid2imnameVal ),
+        iid2impathVal{ iid } = fullfile( dirRoot, 'Data/DET/val', iid2imnameVal{ iid } );
+        iid2annopathVal{ iid } = fullfile( dirRoot, 'Annotations/DET/val', iid2imnameVal{ iid } );
+    end;
     fprintf( 'Done.\n' );
     fprintf( 'Form file path.\n' );
     iid2impath = cat( 1, iid2impathTr, iid2impathVal );
-    iid2impath = cellfun( @( x )strcat( x, '.JPEG' ), iid2impath, 'UniformOutput', false );
     iid2annopath = cat( 1, iid2annopathTr, iid2annopathVal );
-    iid2annopath = cellfun( @( x )strcat( x, '.xml' ), iid2annopath, 'UniformOutput', false );
     iid2setid = cat( 1, ones( size( iid2impathTr ) ), 2 * ones( size( iid2impathVal ) ) );
+    parfor iid = 1 : numel( iid2impath ),
+        iid2impath{ iid } = strcat( iid2impath{ iid }, '.JPEG' );
+        iid2annopath{ iid } = strcat( iid2annopath{ iid }, '.xml' );
+    end;
     fprintf( 'Done.\n' );
     clearvars -except iid2impath iid2annopath iid2setid path dirRoot;
     fprintf( 'Read class information.\n' );
@@ -100,8 +110,7 @@ function [  cid2name, ...
     iid2ispart = false( numIm, 1 );
     iid2name = cell( numIm, 1 );
     parfor iid = 1 : numIm,
-        [ ~, imname ] = fileparts( iid2impath{ iid } );
-        iid2name{ iid } = imname( 1 : end - 5 );
+        [ ~, iid2name{ iid } ] = fileparts( iid2impath{ iid } );
     end;
     numClass = numel( cid2name );
     partImList = cell( numClass, 1 );
