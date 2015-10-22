@@ -6,6 +6,7 @@ path.lib.ilsvrcDevKit                   = '/iron/lib/ILSVRC2015_devkit/devkit/';
 path.lib.vlfeat                         = '/iron/lib/vlfeat/vlfeat-0.9.19/';
 path.lib.jsgd                           = '/iron/lib/jsgd-61/';
 path.lib.selectiveSearch                = '/iron/lib/selectiveSearch/SelectiveSearchCodeIJCV/';
+path.lib.caffePaeng                     = '/iron/lib/caffe-paeng/';
 % Set dst dir.
 path.dstDir                             = '/nickel/data_attnet_clsagn/';
 % Set image DB path only.
@@ -47,4 +48,4 @@ addpath( fullfile( path.lib.jsgd, '/pqcodes_matlab' ) );        % JSGD dependenc
 addpath( fullfile( path.lib.jsgd, '/matlab' ) );                % JSGD main.
 addpath( fullfile( path.lib.ilsvrcDevKit, 'evaluation' ) );     % ILSVRC dev kit.
 addpath( genpath( path.lib.selectiveSearch ) );                 % Selective search.
-
+addpath( fullfile( path.lib.caffePaeng, 'matlab' ) );           % Caffe-Paeng.
