@@ -6,7 +6,6 @@ classdef PropObjCornerPerCls2 < handle
         patchSide;
         scales;
         setting;
-        settingPost;
     end
     methods( Access = public )
         function this = PropObjCornerPerCls2( db, attNet, setting )
@@ -103,8 +102,8 @@ classdef PropObjCornerPerCls2 < handle
             end;
             % Compute each region score.
             if nargout,
-                threshDir = -Inf; 3; 
-                threshCls = -Inf; 3; 
+                threshDir = 2; 
+                threshCls = -Inf; 
                 ov = 1; 0.7; 
                 numDimPerLyr = 4;
                 numCls = this.db.getNumClass;
