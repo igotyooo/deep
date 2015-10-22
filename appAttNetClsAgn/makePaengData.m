@@ -1,7 +1,7 @@
 %% SET PARAMETERS ONLY.
 clc; close all; fclose all; clear all;
 addpath( genpath( '..' ) ); init;
-setting.db                                      = path.db.voc2007; path.db.ilsvrcdet2014;
+setting.db                                      = path.db.ilsvrcdet2015; path.db.voc2007; 
 setting.db.fixMaxSide                           = 0;
 setting.io.tsDb.numScaling                      = 24; 256;
 setting.io.tsDb.dilate                          = 1 / 4;
@@ -18,9 +18,9 @@ io.makeTsDb;
 %% DO THE JOB.
 clearvars -except db io path setting;
 rootDir = '/nickel/data_attnet_clsagn';
-dstName = 'VOC2007_PAENG';
-dbRoot = '/iron/db/VOC2007/';
-setid = 2; 1;
+dstName = strcat( setting.db.name, '_PAENG' );
+dbRoot = setting.db.root;
+setid = 2; 1; 
 numEpoch = 10;
 
 if dbRoot( end ) == '/', dbRoot( end ) = ''; end;
@@ -137,8 +137,8 @@ fprintf( 'Done for %s.\n', lower( setName ) );
 %% VERIFICATION OF PAENG DATA.
 clc; fclose all; clearvars -except db io path setting;
 rootDir = '/nickel/data_attnet_clsagn';
-dstName = 'VOC2007_PAENG';
-dbRoot = '/iron/db/VOC2007/';
+dstName = strcat( setting.db.name, '_PAENG' );
+dbRoot = setting.db.root;
 setid = 1;
 
 switch setid, case 1, setName = 'train'; case 2, setName = 'val'; end;
