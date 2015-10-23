@@ -92,6 +92,7 @@ classdef PropObjCornerPerCls < handle
             % Compute each region score.
             if nargout,
                 thresh = -Inf; 
+                bgdWei = 1; 0.5; 
                 numDimPerLyr = 5;
                 numDimPerCls = numDimPerLyr * 2;
                 signDiag = 2;
@@ -102,10 +103,14 @@ classdef PropObjCornerPerCls < handle
                     dimTl = ( cid - 1 ) * numDimPerCls + 1;
                     dimTl = dimTl : dimTl + numDimPerLyr - 1;
                     dimBr = dimTl + numDimPerLyr;
+                    rid2outTl = rid2out( dimTl, : );
+                    rid2outBr = rid2out( dimBr, : );
+                    rid2outTl( end, : ) = bgdWei * rid2outTl( end, : );
+                    rid2outBr( end, : ) = bgdWei * rid2outBr( end, : );
                     [ rid2sTl, rid2pTl ] = ...
-                        max( rid2out( dimTl, : ), [  ], 1 );
+                        max( rid2outTl, [  ], 1 );
                     [ rid2sBr, rid2pBr ] = ...
-                        max( rid2out( dimBr, : ), [  ], 1 );
+                        max( rid2outBr, [  ], 1 );
                     rid2okTl = ( rid2pTl == signDiag ) & ( rid2sTl > thresh );
                     rid2okBr = ( rid2pBr == signDiag ) & ( rid2sBr > thresh );
                     rid2ok = rid2ok | ( rid2okTl & rid2okBr );
