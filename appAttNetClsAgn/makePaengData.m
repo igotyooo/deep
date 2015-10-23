@@ -131,7 +131,7 @@ clc; fclose all; clearvars -except db io path setting;
 rootDir = '/nickel/data_attnet_clsagn';
 dstName = strcat( setting.db.name, '_PAENG' );
 dbRoot = setting.db.root;
-setid = 2; 1;
+setid = 1; 2; 
 
 switch setid, case 1, setName = 'train'; case 2, setName = 'val'; end;
 srcPath = fullfile( rootDir, dstName, [ setName, '.txt' ] );
@@ -186,8 +186,7 @@ while true,
         else
             cname = db.cid2name{ gtCls };
         end;
-        [ ~, iid0 ] = fileparts( impath );
-        iid0 = str2double( iid0 );
+        iid0 = find( ismember( db.iid2impath, fullfile( dbRoot, impath ) ) );
         subplot( 1, 2, 1 );
         plottlbr( db.oid2bbox( :, db.iid2oids{ iid0 } ), im, false, 'r' );
         title( 'Ground-truth' );
