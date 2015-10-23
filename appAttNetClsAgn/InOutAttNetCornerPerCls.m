@@ -551,7 +551,8 @@ classdef InOutAttNetCornerPerCls < handle
                         numFgd = numDirPair * 2 - numSobj - numBgd;
                         % Foreground sampling.
                         for n = 1 : numFgd,
-                            dpid = max( mod( n, numDirPair ), 1 );
+                            dpid = mod( n, numDirPair );
+                            if ~dpid, dpid = numDirPair; end;
                             flip = round( rand );
                             if flip,
                                 frid2tlbr = subTsDb.oid2dpid2posregnsFlip{ oid }{ dpid };
