@@ -782,9 +782,13 @@ classdef InOutAttNetCornerPerCls2 < handle
                     this.patchSide, ...
                     this.stride, ...
                     dilate );
-                rid2tlbr = round( resizeTlbr( rid2tlbr, imSize, imSize0 ) );
-                if isempty( rid2tlbr ), rid2rect = zeros( 5, 0 ); rid2tlbr = zeros( 5, 0 );
-                else rid2rect = tlbr2rect( rid2tlbr ); end;
+                if isempty( rid2tlbr ), 
+                    rid2tlbr = zeros( 5, 0 ); 
+                    rid2rect = zeros( 5, 0 ); 
+                else
+                    rid2tlbr = round( resizeTlbr( rid2tlbr, imSize, imSize0 ) ); 
+                    rid2rect = tlbr2rect( rid2tlbr ); 
+                end;
                 oid2rect = tlbr2rect( oid2tlbr );
                 oid2area = prod( oid2rect( 3 : 4, : ), 1 )';
                 rid2oid2int = rectint( rid2rect', oid2rect' );
