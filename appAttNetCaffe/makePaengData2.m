@@ -17,7 +17,7 @@ io.makeTsDb;
 %% DO THE JOB.
 clearvars -except db io path setting;
 rootDir = '/nickel/data_attnet_clsagn';
-dstName = strcat( setting.db.name, '_PAENG' );
+dstName = strcat( setting.db.name, '_PAENG2' );
 dbRoot = setting.db.root;
 numEpoch = 10;
 for setid = 1 : 2;
@@ -129,7 +129,7 @@ end;
 %% VERIFICATION OF PAENG DATA.
 clc; fclose all; clearvars -except db io path setting;
 rootDir = '/nickel/data_attnet_clsagn';
-dstName = strcat( setting.db.name, '_PAENG' );
+dstName = strcat( setting.db.name, '_PAENG2' );
 dbRoot = setting.db.root;
 setid = 1; 2; 
 
