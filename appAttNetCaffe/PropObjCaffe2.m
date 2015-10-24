@@ -270,11 +270,6 @@ classdef PropObjCaffe2 < handle
             this.attNet.blobs( 'data' ).reshape( [ w, h, c, n ] );
             res = this.attNet.forward( im );
             res = cellfun( @( x )permute( x, [ 2, 1, 3, 4 ] ), res, 'UniformOutput', false );
-            % [ h, w, c, n ] = size( im );
-            % im = im( :, :, [ 3, 2, 1 ], : );
-            % im = { im };
-            % this.attNet.blobs( 'data' ).reshape( [ h, w, c, n ] );
-            % res = this.attNet.forward( im );
         end;
         % Functions for identification.
         function name = getName( this )
