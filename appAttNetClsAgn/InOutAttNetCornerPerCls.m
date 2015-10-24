@@ -546,7 +546,7 @@ classdef InOutAttNetCornerPerCls < handle
                         cid = cids( o );
                         lids = [ cid * 2 - 1; cid * 2 ];
                         snegregns = subTsDb.oid2snegregns{ oid };
-                        numSobj = min( numDirPair, size( snegregns, 2 ) );
+                        numSobj = min( round( numDirPair / 2 ), size( snegregns, 2 ) );
                         if noBgd, numBgd = 0; else numBgd = numDirPair - numSobj; end;
                         numFgd = numDirPair * 2 - numSobj - numBgd;
                         % Foreground sampling.
@@ -572,8 +572,9 @@ classdef InOutAttNetCornerPerCls < handle
                         for n = 1 : numSobj,
                             if sid == numSample, break; end;
                             sid = sid + 1;
+                            snrid = ceil( size( snegregns, 2 ) * rand );
                             sid2iid( sid ) = iid;
-                            sid2tlbr( :, sid ) = snegregns( :, n );
+                            sid2tlbr( :, sid ) = snegregns( :, snrid );
                             sid2gt( lids, sid ) = [ bgdClsId; bgdClsId; ];
                             sid2flip( sid ) = round( rand );
                         end;
