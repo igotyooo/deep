@@ -37,7 +37,6 @@ for setid = 1 : 2;
     numObj = numel( subTsDb.oid2iid );
     bgdClsId = numClass + 1;
     dpid2dp = io.directions.dpid2dp;
-    numLyr = numClass * 2 + 1;
     rng( 'shuffle' );
     if max( subTsDb.oid2iid ) ~= numel( subTsDb.iid2impath ), error( 'In consistent # of im.\n' ); end;
     numIm = max( subTsDb.oid2iid );
@@ -153,38 +152,29 @@ while true,
         nums( 1 : 4 ) = [  ];
         flip = nums( 1 );
         nums( 1 ) = [  ];
-        gtDir = nums( 1 : end - 1 );
-        nums( 1 : end - 1 ) = [  ];
-        gtCls = nums;
+        gtDir = nums( 1 : 2 );
+        nums( 1 : 2 ) = [  ];
+        gtCls = nums( 1 );
         nums( 1 ) = [  ];
         if ~isempty( nums ), error( 'Wrong txt length.\n' ); end;
-        bbox = bbox( [ 2; 1; 4; 3; ], : );
-        bbox = bbox + 1;
-        gtDir = gtDir + 1;
-        gtDir = gtDir( gtDir ~= 5 );
-        gtCls = gtCls + 1;
-        if ~isempty( gtDir ),
-            switch gtDir( 1 )
-                case 1, dnameTl = 'down';
-                case 2, dnameTl = 'diag';
-                case 3, dnameTl = 'right';
-                case 4, dnameTl = 'stop';
-            end;
-            switch gtDir( 2 )
-                case 1, dnameBr = 'up';
-                case 2, dnameBr = 'diag';
-                case 3, dnameBr = 'left';
-                case 4, dnameBr = 'stop';
-            end;
-        else
-            if gtCls ~= ( db.getNumClass + 1 ), error( 'Wrong fgd/bgd label.' ); end;
-            dnameTl = 'bgd';
-            dnameBr = 'bgd';
+        switch gtDir( 1 ) + 1,
+            case 1, dnameTl = 'down';
+            case 2, dnameTl = 'diag';
+            case 3, dnameTl = 'right';
+            case 4, dnameTl = 'stop';
+            case 5, dnameTl = 'none';
         end;
-        if gtCls == ( db.getNumClass + 1 ),
+        switch gtDir( 2 ) + 1,
+            case 1, dnameBr = 'up';
+            case 2, dnameBr = 'diag';
+            case 3, dnameBr = 'left';
+            case 4, dnameBr = 'stop';
+            case 5, dnameBr = 'none';
+        end;
+        if ( gtCls + 1 ) == ( db.getNumClass + 1 ),
             cname = 'bgd';
         else
-            cname = db.cid2name{ gtCls };
+            cname = db.cid2name{ gtCls + 1 };
         end;
         iid0 = find( ismember( db.iid2impath, fullfile( dbRoot, impath ) ) );
         subplot( 1, 2, 1 );
@@ -192,11 +182,11 @@ while true,
         title( 'Ground-truth' );
         hold off;
         subplot( 1, 2, 2 );
-        imRegn = uint8( normalizeAndCropImage( im, bbox, uint8( cat( 3, 0, 0, 0 ) ), 'bicubic' ) );
+        imRegn = uint8( normalizeAndCropImage( im, bbox( [ 2; 1; 4; 3; ], : ) + 1, uint8( cat( 3, 0, 0, 0 ) ), 'bicubic' ) );
         imRegn = imresize( imRegn, [ io.patchSide, io.patchSide ] );
         if flip, imRegn = fliplr( imRegn ); end;
         imshow( imRegn ); 
-        title( sprintf( 'IID%d, %s, %s/%s (%d/%d)', iid, cname, dnameTl, dnameBr, sid, numBox ) );
+        title( sprintf( 'IID%d, %s, %s/%s (%d/%d)', iid + 1, cname, dnameTl, dnameBr, sid, numBox ) );
         hold off;
         waitforbuttonpress; 
     end;
