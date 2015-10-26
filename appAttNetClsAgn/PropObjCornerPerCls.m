@@ -6,12 +6,12 @@ classdef PropObjCornerPerCls < handle
         patchSide;
         scales;
         setting;
-        settingPost;
     end
     methods( Access = public )
         function this = PropObjCornerPerCls( db, attNet, setting )
             this.db = db;
             this.attNet = attNet;
+            this.setting.normalizeImageMaxSide = 0;
             this.setting.numScaling = 24;
             this.setting.dilate = 1 / 4;
             this.setting.posIntOverRegnMoreThan = 1 / 3;
@@ -20,6 +20,7 @@ classdef PropObjCornerPerCls < handle
         end
         function init( this, gpus )
             % Set parameters.
+            maxSide = this.setting.normalizeImageMaxSide;
             numScaling = this.setting.numScaling;
             posIntOverRegnMoreThan = this.setting.posIntOverRegnMoreThan;
             % Fetch net on GPU.
@@ -39,7 +40,17 @@ classdef PropObjCornerPerCls < handle
             catch
                 fprintf( '%s: Determine scaling factors.\n', ...
                     upper( mfilename ) );
-                oid2tlbr = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == 1 );
+                setid = 2;
+                oid2tlbr = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == setid );
+                if maxSide,
+                    oid2iid = this.db.oid2iid( this.db.iid2setid( this.db.oid2iid ) == setid );
+                    oid2imsize = this.db.iid2size( :, oid2iid );
+                    numRegn = size( oid2tlbr, 2 );
+                    for oid = 1 : numRegn,
+                        [ ~, oid2tlbr( :, oid ) ] = normalizeImageSize...
+                            ( maxSide, oid2imsize( :, oid ), oid2tlbr( :, oid ) );
+                    end;
+                end;
                 referenceSide = this.patchSide * sqrt( posIntOverRegnMoreThan );
                 [ scalesRow, scalesCol ] = determineImageScaling...
                     ( oid2tlbr, numScaling, referenceSide, true );
@@ -91,38 +102,56 @@ classdef PropObjCornerPerCls < handle
             end;
             % Compute each region score.
             if nargout,
-                thresh = -Inf; 
-                bgdWei = 1; 0.5; 
+                threshDir = 7; -Inf; 
+                ov = 1; 0.7; 
                 numDimPerLyr = 5;
-                numDimPerCls = numDimPerLyr * 2;
+                numCls = this.db.getNumClass;
                 signDiag = 2;
-                numLyr = size( rid2out, 1 ) / numDimPerLyr;
-                numCls = numLyr / 2;
-                rid2ok = false( 1, size( rid2out, 2 ) );
+                rid2tlbrProp = cell( numCls, 1 );
+                rid2scoreProp = cell( numCls, 1 );
                 for cid = 1 : numCls,
-                    dimTl = ( cid - 1 ) * numDimPerCls + 1;
+                    dimTl = ( cid - 1 ) * numDimPerLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerLyr - 1;
                     dimBr = dimTl + numDimPerLyr;
                     rid2outTl = rid2out( dimTl, : );
                     rid2outBr = rid2out( dimBr, : );
-                    rid2outTl( end, : ) = bgdWei * rid2outTl( end, : );
-                    rid2outBr( end, : ) = bgdWei * rid2outBr( end, : );
-                    [ rid2sTl, rid2pTl ] = ...
-                        max( rid2outTl, [  ], 1 );
-                    [ rid2sBr, rid2pBr ] = ...
-                        max( rid2outBr, [  ], 1 );
-                    rid2okTl = ( rid2pTl == signDiag ) & ( rid2sTl > thresh );
-                    rid2okBr = ( rid2pBr == signDiag ) & ( rid2sBr > thresh );
-                    rid2ok = rid2ok | ( rid2okTl & rid2okBr );
+                    [ rid2sTl, rid2pTl ] = max( rid2outTl, [  ], 1 );
+                    [ rid2sBr, rid2pBr ] = max( rid2outBr, [  ], 1 );
+                    rid2sTl = rid2sTl * 2 - sum( rid2outTl, 1 );
+                    rid2sBr = rid2sBr * 2 - sum( rid2outBr, 1 );
+                    rid2s = ( rid2sTl + rid2sBr ) / 2;
+                    rid2okTl = ( rid2pTl == signDiag ) & ( rid2sTl > threshDir );
+                    rid2okBr = ( rid2pBr == signDiag ) & ( rid2sBr > threshDir );
+                    rid2ok = rid2okTl & rid2okBr;
+                    rid2tlbrBff = rid2tlbr( 1 : 4, rid2ok );
+                    rid2scoreBff = rid2s( rid2ok );
+                    if ov ~= 1,
+                        pick = nms_iou( [ rid2tlbrBff; rid2scoreBff ]', ov );
+                        rid2tlbrBff = rid2tlbrBff( :, pick );
+                        rid2scoreBff = rid2scoreBff( pick );
+                    end;
+                    rid2tlbrProp{ cid } = rid2tlbrBff;
+                    rid2scoreProp{ cid } = rid2scoreBff;
                 end;
-                rid2tlbr = rid2tlbr( 1 : 4, rid2ok );
+                rid2tlbr = cat( 2, rid2tlbrProp{ : } );
+                rid2score = cat( 2, rid2scoreProp{ : } );
             end;
         end
         function [ rid2out, rid2tlbr ] = im2det( this, im )
             dilate = this.setting.dilate;
+            maxSide = this.setting.normalizeImageMaxSide;
             [ r, c, ~ ] = size( im );
             imSize0 = [ r; c; ];
-            sid2size = round( bsxfun( @times, this.scales, imSize0 ) );
+            if maxSide, imSize = normalizeImageSize( maxSide, imSize0 ); else imSize = imSize0; end;
+            sid2size = round( bsxfun( @times, this.scales, imSize ) );
+            rid2tlbr = ...
+                extractDenseRegions( ...
+                imSize, ...
+                sid2size, ...
+                this.patchSide, ...
+                this.stride, ...
+                dilate );
+            rid2tlbr = round( resizeTlbr( rid2tlbr, imSize, imSize0 ) );
             rid2out = ...
                 extractDenseActivations( ...
                 im, ...
@@ -130,13 +159,6 @@ classdef PropObjCornerPerCls < handle
                 numel( this.attNet.layers ) - 1, ...
                 sid2size, ...
                 this.patchSide, ...
-                dilate );
-            rid2tlbr = ...
-                extractDenseRegions( ...
-                imSize0, ...
-                sid2size, ...
-                this.patchSide, ...
-                this.stride, ...
                 dilate );
             if size( rid2out, 2 ) ~= size( rid2tlbr, 2 ),
                 error( 'Inconsistent number of regions.\n' ); end;
@@ -197,11 +219,12 @@ classdef PropObjCornerPerCls < handle
         end
         function name = getScaleFactorName( this )
             numScaling = this.setting.numScaling;
+            maxSide = this.setting.normalizeImageMaxSide;
             piormt = this.setting.posIntOverRegnMoreThan;
             piormt = num2str( piormt );
             piormt( piormt == '.' ) = 'P';
-            name = sprintf( 'SFTE_N%03d_PIORMT%s_OF_%s', ...
-                numScaling, piormt, this.db.getName );
+            name = sprintf( 'SFTE_N%03d_PIORMT%s_NIMS%d_OF_%s', ...
+                numScaling, piormt, maxSide, this.db.getName );
             name( strfind( name, '__' ) ) = '';
             if name( end ) == '_', name( end ) = ''; end;
         end
