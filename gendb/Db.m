@@ -272,6 +272,17 @@ classdef Db < handle
             fprintf( '%s: reduced to %s\n', ...
                 upper( mfilename ), upper( newDbName ) );
         end
+        function demoBbox( this, fid, iid )
+            if nargin < 3, iid = ceil( rand * this.getNumIm ); end;
+            oids = this.iid2oids{ iid };
+            cids = this.oid2cid( oids );
+            cnames = this.cid2name( cids );
+            bboxs = this.oid2bbox( :, oids );
+            im = this.iid2impath{ iid };
+            figure( fid );
+            plottlbr( bboxs, im, false, 'r', cnames );
+            set( gcf, 'color', 'w' ); hold off;
+        end;
         % Functions for object identification.
         function name = getName( this )
             name = upper( mfilename );
