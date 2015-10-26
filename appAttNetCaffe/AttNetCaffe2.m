@@ -195,37 +195,6 @@ classdef AttNetCaffe2 < handle
                 waitforbuttonpress;
             end;
         end
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
         function detSubDb( this, numDiv, divId )
             iids = this.db.getTeiids;
             numIm = numel( iids );
@@ -302,139 +271,6 @@ classdef AttNetCaffe2 < handle
             this.did2tlbr = res.did2tlbr;
             this.did2score = res.did2score;
             this.refineId = 0;
-        end
-        function [ ap, rank2iid, rank2bbox, rank2tp, rank2fp ] = ...
-                computeAp( this, addrss )
-            % Set parameters.
-            clsName = this.attNet.srcInOut.settingTsDb.selectClassName;
-            minoverlap = 0.5;
-            minDetArea = 500;
-            clsId = cellfun( ...
-                @( cname )strcmp( cname, clsName ), ...
-                this.db.cid2name );
-            clsId = find( clsId );
-            % Prepare data.
-            iidx2iid = this.db.getTeiids;
-            numTeIm = numel( iidx2iid );
-            oid2target = this.db.oid2cid == clsId;
-            % Get ground-truth.
-            iidx2oidx2bbox = cell( numTeIm, 1 );
-            iidx2oidx2diff = cell( numTeIm, 1 );
-            iidx2oidx2det = cell( numTeIm, 1 );
-            numPos = 0;
-            fprintf( '%s: Compute gt.\n', upper( mfilename ) );
-            for iidx = 1 : numTeIm;
-                iid = iidx2iid( iidx );
-                oidx2oid = ( this.db.oid2iid == iid ) & oid2target;
-                iidx2oidx2bbox{ iidx } = this.db.oid2bbox( :, oidx2oid );
-                iidx2oidx2diff{ iidx } = this.db.oid2diff( oidx2oid );
-                iidx2oidx2det{ iidx } = false( sum( oidx2oid ), 1 );
-                numPos = numPos + sum( ~iidx2oidx2diff{ iidx } );
-            end
-            % Cut detection results by minimum area.
-            did2rect = tlbr2rect( this.did2tlbr );
-            did2area = prod( did2rect( 3 : 4, : ), 1 );
-            did2ok = did2area >= minDetArea;
-            did2score_ = this.did2score( did2ok );
-            did2iid_ = this.did2iid( did2ok );
-            did2tlbr_ = this.did2tlbr( :, did2ok );
-            % Sort detection results.
-            [ ~, rank2did ] = sort( - did2score_ );
-            rank2iid = did2iid_( rank2did );
-            rank2bbox = did2tlbr_( :, rank2did );
-            % Determine TP/FP/DONT-CARE.
-            numDet = numel( rank2did );
-            rank2tp = zeros( numDet, 1 );
-            rank2fp = zeros( numDet, 1 );
-            for r = 1 : numDet,
-                iid = rank2iid( r );
-                iidx = find( iidx2iid == iid );
-                detBbox = rank2bbox( :, r );
-                ovMax = -Inf;
-                for oidx = 1 : size( iidx2oidx2bbox{ iidx }, 2 ),
-                    gtBbox = iidx2oidx2bbox{ iidx }( :, oidx );
-                    insectBbox = [  ...
-                        max( detBbox( 1 ), gtBbox( 1 ) ); ...
-                        max( detBbox( 2 ), gtBbox( 2 ) ); ...
-                        min( detBbox( 3 ), gtBbox( 3 ) ); ...
-                        min( detBbox( 4 ), gtBbox( 4 ) ); ];
-                    insectW = insectBbox( 3 ) - insectBbox( 1 ) + 1;
-                    insectH = insectBbox( 4 ) - insectBbox( 2 ) + 1;
-                    if insectW > 0 && insectH > 0,
-                        union = ...
-                            ( detBbox( 3 ) - detBbox( 1 ) + 1 ) * ...
-                            ( detBbox( 4 ) - detBbox( 2 ) + 1 ) + ...
-                            ( gtBbox( 3 ) - gtBbox( 1 ) + 1 ) * ...
-                            ( gtBbox( 4 ) - gtBbox( 2 ) + 1 ) - ...
-                            insectW * insectH;
-                        ov = insectW * insectH / union;
-                        if ov > ovMax, ovMax = ov; oidxMax = oidx; end;
-                    end
-                end
-                if ovMax >= minoverlap,
-                    if ~iidx2oidx2diff{ iidx }( oidxMax ),
-                        if ~iidx2oidx2det{ iidx }( oidxMax ),
-                            rank2tp( r ) = 1;
-                            iidx2oidx2det{ iidx }( oidxMax ) = true;
-                        else
-                            rank2fp( r ) = 1;
-                        end
-                    end
-                else
-                    rank2fp( r ) = 1;
-                end
-            end
-            % Compute AP.
-            rank2fpCum = cumsum( rank2fp );
-            rank2tpCum = cumsum( rank2tp );
-            rec = rank2tpCum / numPos;
-            prec = rank2tpCum ./ ( rank2fpCum + rank2tpCum );
-            ap=0;
-            for t = 0 : 0.1 : 1,
-                p = max( prec( rec >= t ) );
-                if isempty( p ), p = 0; end;
-                ap = ap + p / 11;
-            end
-            this.reportTestResult( ap, addrss );
-        end
-        function reportTestResult...
-                ( this, ap, addrss )
-            title = sprintf( '%s: TEST REPORT', ...
-                upper( mfilename ) );
-            mssg = {  };
-            mssg{ end + 1 } = '___________';
-            mssg{ end + 1 } = 'TEST REPORT';
-            mssg{ end + 1 } = sprintf( 'DATABASE: %s', ...
-                this.db.name );
-            mssg{ end + 1 } = sprintf( 'TARGET CLASS: %s', ...
-                upper( this.attNet.srcInOut.settingTsDb.selectClassName ) );
-            mssg{ end + 1 } = sprintf( 'INOUT: %s', ...
-                this.attNet.srcInOut.getName );
-            mssg{ end + 1 } = sprintf( 'CNN: %s', ...
-                this.attNet.getNetName );
-            mssg{ end + 1 } = sprintf( 'DETECTOR: %s', ...
-                this.getName );
-            mssg{ end + 1 } = sprintf( 'INIT MERGE: %s', ...
-                this.settingInitMrg.changes );
-            mssg{ end + 1 } = sprintf( 'REFINE ID: %d', ...
-                    this.refineId );
-            if this.refineId > 0,
-                mssg{ end + 1 } = sprintf( 'REFINE: %s', ...
-                    this.settingRefine.changes );
-            end
-            mssg{ end + 1 } = ...
-                sprintf( 'AP: %.2f%', ap * 100 );
-            mssg{ end + 1 } = ' ';
-            cellfun( @( str )fprintf( '%s\n', str ), mssg );
-            if ~isempty( addrss )
-                sendEmail( ...
-                    'visionresearchreport@gmail.com', ...
-                    'visionresearchreporter', ...
-                    addrss, ...
-                    title, ...
-                    mssg, ...
-                    '' );
-            end
         end
         function dir = getDir( this )
             name = this.getName;
@@ -532,18 +368,23 @@ classdef AttNetCaffe2 < handle
                 fprintf( '%s: %dth feed. %d regions.\n', ...
                     upper( mfilename ), feed, numRegn );
                 rid2out = zeros( numOutDim, numRegn, 'single' );
+                trsiz = 0;
+                tfwd =0;
                 for r = 1 : testBatchSize : numRegn,
+                    trsiz_ = tic;
                     rids = r : min( r + testBatchSize - 1, numRegn );
                     bsize = numel( rids );
                     brid2tlbr = rid2tlbr( :, rids );
                     brid2im = zeros( this.inputSide, this.inputSide, inputCh, bsize, 'single' );
-                    parfor brid = 1 : bsize,
+                    for brid = 1 : bsize,
                         roi = brid2tlbr( :, brid );
                         imRegn = im( roi( 1 ) : roi( 3 ), roi( 2 ) : roi( 4 ), : );
                         brid2im( :, :, :, brid ) = imresize...
                             ( imRegn, [ this.inputSide, this.inputSide ], 'method', interpolation );
                     end;
+                    trsiz = trsiz + toc( trsiz_ );
                     % Feedforward.
+                    tfwd_ = tic;
                     lyid2out = this.feedforwardCaffe( brid2im );
                     lyid02out = lyid2out( this.lyid02lyid );
                     for lyid0 = 1 : numel( lyid02out ),
@@ -553,7 +394,9 @@ classdef AttNetCaffe2 < handle
                     end;
                     brid2out = cat( 1, lyid02out{ : } );
                     rid2out( :, rids ) = brid2out;
+                    tfwd = tfwd + toc( tfwd_ );
                 end;
+                fprintf( '%s: Preproc t = %.2f sec, Fwd t = %.2f sec.\n', upper( mfilename ), trsiz, tfwd );
                 % Do the job.
                 nrid2tlbr = zeros( 4, buffSize, 'single' );
                 nrid2fill = false( 1, buffSize );
@@ -620,12 +463,7 @@ classdef AttNetCaffe2 < handle
             im = { im };
             this.attNet.blobs( 'data' ).reshape( [ w, h, c, n ] );
             res = this.attNet.forward( im );
-        end;
+            res = cellfun( @( x )permute( x, [ 2, 1, 3, 4 ] ), res, 'UniformOutput', false );
+        end
     end
 end
-
-
-
-
-
-
