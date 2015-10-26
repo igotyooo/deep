@@ -16,6 +16,7 @@ classdef PropObjCaffe2 < handle
             this.setting.normalizeImageMaxSide = 0;
             this.setting.numScaling = 24;
             this.setting.dilate = 1 / 4;
+            this.setting.maximumImageSize = 9e6;
             this.setting.posIntOverRegnMoreThan = 1 / 3;
             this.setting = setChanges...
                 ( this.setting, setting, upper( mfilename ) );
@@ -169,6 +170,7 @@ classdef PropObjCaffe2 < handle
         function [ rid2out, rid2tlbr ] = im2det( this, im )
             dilate = this.setting.dilate;
             maxSide = this.setting.normalizeImageMaxSide;
+            maximumImageSize = this.setting.maximumImageSize;
             [ r, c, ~ ] = size( im );
             imSize0 = [ r; c; ];
             if maxSide, imSize = normalizeImageSize( maxSide, imSize0 ); else imSize = imSize0; end;
@@ -179,7 +181,8 @@ classdef PropObjCaffe2 < handle
                 sid2size, ...
                 this.patchSide, ...
                 this.stride, ...
-                dilate );
+                dilate, ...
+                maximumImageSize );
             rid2tlbr = round( resizeTlbr( rid2tlbr, imSize, imSize0 ) );
             rid2out = this.extractDenseActivationsCaffe( im, sid2size );
             if size( rid2out, 2 ) ~= size( rid2tlbr, 2 ),
@@ -216,6 +219,7 @@ classdef PropObjCaffe2 < handle
                 originalImage, ...
                 targetImageSizes )
             regionDilate = this.setting.dilate;
+            maximumImageSize = this.setting.maximumImageSize;
             imageDilate = round( this.patchSide * regionDilate );
             interpolation = 'bilinear';
             numSize = size( targetImageSizes, 2 );
@@ -226,7 +230,7 @@ classdef PropObjCaffe2 < handle
                 trsiz_ = tic;
                 imSize = targetImageSizes( :, sid );
                 if min( imSize ) + 2 * imageDilate < this.patchSide, continue; end;
-                if prod( imSize + imageDilate * 2 ) > 15000000,
+                if prod( imSize + imageDilate * 2 ) > maximumImageSize,
                     fprintf( '%s: Warning) Im of %s rejected.\n', ...
                         upper( mfilename ), mat2str( imSize ) ); continue;
                 end;
