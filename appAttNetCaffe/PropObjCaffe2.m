@@ -135,48 +135,35 @@ classdef PropObjCaffe2 < handle
             end;
             % Compute each region score.
             if nargout,
-                threshDir = -Inf; 
+                threshDir = 0.1; 0.15; 2; -Inf; 
                 threshCls = -Inf; 
-                ov = 1; 0.7; 
                 numDimPerLyr = 4;
                 numCls = this.db.getNumClass;
                 numDimCls = numCls + 1;
                 dimCls = numCls * numDimPerLyr * 2 + ( 1 : numDimCls );
                 signDiag = 2;
                 rid2tlbrProp = cell( numCls, 1 );
-                rid2scoreProp = cell( numCls, 1 );
                 for cid = 1 : numCls,
+                    % Direction.
                     dimTl = ( cid - 1 ) * numDimPerLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerLyr - 1;
                     dimBr = dimTl + numDimPerLyr;
                     rid2outTl = rid2out( dimTl, : );
                     rid2outBr = rid2out( dimBr, : );
+                    rid2sTl = rid2outTl( signDiag, : );
+                    rid2sBr = rid2outBr( signDiag, : );
+                    rid2okTl = rid2sTl > threshDir;
+                    rid2okBr = rid2sBr > threshDir;
+                    % Classification.
                     rid2outCls = rid2out( dimCls, : );
-                    rid2outTl( signDiag, : ) = rid2outTl( signDiag, : ) * 3; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                    rid2outBr( signDiag, : ) = rid2outBr( signDiag, : ) * 3; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                    [ rid2sTl, rid2pTl ] = max( rid2outTl, [  ], 1 );
-                    [ rid2sBr, rid2pBr ] = max( rid2outBr, [  ], 1 );
                     [ rid2sCls, rid2pCls ] = max( rid2outCls, [  ], 1 );
-                    rid2sTl = rid2sTl * 2 - sum( rid2outTl, 1 );
-                    rid2sBr = rid2sBr * 2 - sum( rid2outBr, 1 );
                     rid2sCls = rid2sCls * 2 - sum( rid2outCls, 1 );
-                    rid2s = ( rid2sTl + rid2sBr ) / 2 + rid2sCls;
-                    rid2okTl = ( rid2pTl == signDiag ) & ( rid2sTl > threshDir );
-                    rid2okBr = ( rid2pBr == signDiag ) & ( rid2sBr > threshDir );
                     rid2okCls = ( rid2pCls == cid ) & ( rid2sCls > threshCls );
                     rid2ok = rid2okTl & rid2okBr & rid2okCls;
                     rid2tlbrBff = rid2tlbr( 1 : 4, rid2ok );
-                    rid2scoreBff = rid2s( rid2ok );
-                    if ov ~= 1,
-                        pick = nms_iou( [ rid2tlbrBff; rid2scoreBff ]', ov );
-                        rid2tlbrBff = rid2tlbrBff( :, pick );
-                        rid2scoreBff = rid2scoreBff( pick );
-                    end;
                     rid2tlbrProp{ cid } = rid2tlbrBff;
-                    rid2scoreProp{ cid } = rid2scoreBff;
                 end;
                 rid2tlbr = cat( 2, rid2tlbrProp{ : } );
-                rid2score = cat( 2, rid2scoreProp{ : } );
             end;
         end
         function [ rid2out, rid2tlbr ] = im2det( this, im )
@@ -233,7 +220,10 @@ classdef PropObjCaffe2 < handle
             interpolation = 'bicubic';
             numSize = size( targetImageSizes, 2 );
             rid2out = cell( numSize, 1 );
+            trsiz = 0;
+            tfwd =0;
             for sid = 1 : numSize,
+                trsiz_ = tic;
                 imSize = targetImageSizes( :, sid );
                 if min( imSize ) + 2 * imageDilate < this.patchSide, continue; end;
                 if prod( imSize + imageDilate * 2 ) > 15000000,
@@ -249,6 +239,9 @@ classdef PropObjCaffe2 < handle
                     1 - imageDilate; ...
                     imSize( : ) + imageDilate; ];
                 im = normalizeAndCropImage( im, roi, this.rgbMean, interpolation );
+                fprintf( '%s: Feed im of %dX%d size.\n', upper( mfilename ), size( im, 1 ), size( im, 2 ) );
+                trsiz = trsiz + toc( trsiz_ );
+                tfwd_ = tic;
                 lyid2out = this.feedforwardCaffe( im );
                 lyid02out = lyid2out( this.lyid02lyid );
                 for lyid0 = 1 : numel( lyid02out ),
@@ -258,7 +251,9 @@ classdef PropObjCaffe2 < handle
                     lyid02out{ lyid0 } = out;
                 end;
                 rid2out{ sid } = cat( 1, lyid02out{ : } );
+                tfwd = tfwd + toc( tfwd_ );
             end % Next scale.
+            fprintf( '%s: Preproc t = %.2f sec, Fwd t = %.2f sec.\n', upper( mfilename ), trsiz, tfwd );
             % Aggregate for each layer.
             rid2out = cat( 2, rid2out{ : } );
         end
