@@ -217,7 +217,7 @@ classdef PropObjCaffe2 < handle
                 targetImageSizes )
             regionDilate = this.setting.dilate;
             imageDilate = round( this.patchSide * regionDilate );
-            interpolation = 'bicubic';
+            interpolation = 'bilinear';
             numSize = size( targetImageSizes, 2 );
             rid2out = cell( numSize, 1 );
             trsiz = 0;

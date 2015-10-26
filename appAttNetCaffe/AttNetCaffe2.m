@@ -91,7 +91,7 @@ classdef AttNetCaffe2 < handle
             rid2tlbr0 = scaleBoxes( rid2tlbr0, sqrt( rescaleBox ), sqrt( rescaleBox ) );
             rid2tlbr0 = round( rid2tlbr0 );
             % Do detection on each region.
-            interpolation = 'bicubic';
+            interpolation = 'bilinear';
             im = imread( this.db.iid2impath{ iid } );
             imTl = min( rid2tlbr0( 1 : 2, : ), [  ], 2 );
             imBr = max( rid2tlbr0( 3 : 4, : ), [  ], 2 );
@@ -342,7 +342,7 @@ classdef AttNetCaffe2 < handle
             % Preparing for data.
             testBatchSize = 256 / 2;
             numMaxFeed = this.settingMain.numMaxTest;
-            interpolation = 'bicubic';
+            interpolation = 'bilinear';
             dvecSize = this.settingMain.directionVectorSize;
             inputCh = size( im, 3 );
             numDimPerDirLyr = 4;
