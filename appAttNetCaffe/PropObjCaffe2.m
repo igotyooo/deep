@@ -136,13 +136,14 @@ classdef PropObjCaffe2 < handle
             end;
             % Compute each region score.
             if nargout,
-                threshDir = 0.1; 0.15; 2; -Inf; 
-                threshCls = -Inf; 
+                threshDir = 0.1;
                 numDimPerLyr = 4;
                 numCls = this.db.getNumClass;
                 numDimCls = numCls + 1;
                 dimCls = numCls * numDimPerLyr * 2 + ( 1 : numDimCls );
                 signDiag = 2;
+                rid2outCls = rid2out( dimCls, : );
+                [ ~, rid2pCls ] = max( rid2outCls, [  ], 1 );
                 rid2tlbrProp = cell( numCls, 1 );
                 for cid = 1 : numCls,
                     % Direction.
@@ -151,15 +152,12 @@ classdef PropObjCaffe2 < handle
                     dimBr = dimTl + numDimPerLyr;
                     rid2outTl = rid2out( dimTl, : );
                     rid2outBr = rid2out( dimBr, : );
-                    rid2sTl = rid2outTl( signDiag, : );
-                    rid2sBr = rid2outBr( signDiag, : );
+                    rid2sTl = rid2outTl( signDiag, : ) * 2 - sum( rid2outTl, 1 );
+                    rid2sBr = rid2outBr( signDiag, : ) * 2 - sum( rid2outBr, 1 );
                     rid2okTl = rid2sTl > threshDir;
                     rid2okBr = rid2sBr > threshDir;
                     % Classification.
-                    rid2outCls = rid2out( dimCls, : );
-                    [ rid2sCls, rid2pCls ] = max( rid2outCls, [  ], 1 );
-                    rid2sCls = rid2sCls * 2 - sum( rid2outCls, 1 );
-                    rid2okCls = ( rid2pCls == cid ) & ( rid2sCls > threshCls );
+                    rid2okCls = rid2pCls == cid;
                     rid2ok = rid2okTl & rid2okBr & rid2okCls;
                     rid2tlbrBff = rid2tlbr( 1 : 4, rid2ok );
                     rid2tlbrProp{ cid } = rid2tlbrBff;
