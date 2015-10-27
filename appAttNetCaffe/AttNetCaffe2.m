@@ -399,6 +399,7 @@ classdef AttNetCaffe2 < handle
                 % Do the job.
                 nrid2tlbr = zeros( 4, buffSize, 'single' );
                 nrid2fill = false( 1, buffSize );
+                nrid2mcid = zeros( buffSize, 1, 'single' );
                 nrid = 1;
                 [ ~, rid2pCls ] = max( rid2out( dimCls, : ), [  ], 1 );
                 for cid = 1 : numCls,
@@ -409,8 +410,7 @@ classdef AttNetCaffe2 < handle
                     [ ~, rid2pbr ] = max( rid2out( dimBr, : ), [  ], 1 );
                     % Find and store detections.
                     rid2stop = rid2ptl == signStop & rid2pbr == signStop;
-                    rid2istarget = rid2pCls == cid;
-                    rid2det = rid2stop & rid2istarget;
+                    rid2det = rid2stop & rid2pCls == cid;
                     numDet = sum( rid2det );
                     dids = did : did + numDet - 1;
                     did2tlbr( :, dids ) = rid2tlbr( :, rid2det );
@@ -418,15 +418,18 @@ classdef AttNetCaffe2 < handle
                     did2fill( dids ) = true;
                     did = did + numDet;
                     % Find and store regiones to be continued.
-                    rid2fgd2 = ...
-                        ( rid2pCls ~= ( numCls + 1 ) ) & ...
-                        ( rid2ptl == 2 & rid2pbr == 2 );
-                    rid2cont = ( rid2istarget | rid2fgd2 ) & ~rid2det;
+                    rid2target = rid2pCls == cid;
+                    rid2cand = ...
+                        ( rid2pCls ~= cid ) & ...                       % Even if some regions are not classified to the this class,
+                        ( rid2pCls ~= ( numCls + 1 ) ) & ...            % but they are not background at least, 
+                        ( rid2ptl == 2 & rid2pbr == 2 );                % and predicted as diag/diag direction. We therefore regard them as candidates for this class.
+                    rid2cont = ( rid2target | rid2cand );
                     numCont = sum( rid2cont );
                     if ~numCont, continue; end;
                     idx2tlbr = rid2tlbr( :, rid2cont );
                     idx2ptl = rid2ptl( rid2cont );
                     idx2pbr = rid2pbr( rid2cont );
+                    idx2cid = rid2pCls( rid2cont );
                     idx2tlbrWarp = [ ...
                         this.directions.did2vecTl( :, idx2ptl ) * dvecSize + 1; ...
                         this.directions.did2vecBr( :, idx2pbr ) * dvecSize + this.inputSide; ];
@@ -440,12 +443,15 @@ classdef AttNetCaffe2 < handle
                     end;
                     nrids = nrid : nrid + numCont - 1;
                     nrid2tlbr( :, nrids ) = idx2tlbr;
+                    nrid2mcid( nrids ) = idx2cid;
                     nrid2fill( nrids ) = true;
                     nrid = nrid + numCont;
                 end;
-                rid2tlbr = round( nrid2tlbr( :, nrid2fill ) );
-                rid2tlbr = unique( rid2tlbr', 'rows', 'stable' );
-                rid2tlbr = rid2tlbr';
+                nrid2tlbr = round( nrid2tlbr( :, nrid2fill ) );
+                nrid2mcid = nrid2mcid( nrid2fill );
+                foo = unique( [ nrid2tlbr', nrid2mcid ], 'rows', 'stable' );
+                rid2tlbr = foo( :, 1 : 4 )';
+                rid2mcid = foo( :, 5 );
                 numRegn = size( rid2tlbr, 2 );
                 if ~numRegn, break; end;
             end;
