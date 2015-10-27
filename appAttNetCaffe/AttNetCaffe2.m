@@ -353,7 +353,6 @@ classdef AttNetCaffe2 < handle
             dimCls = numCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
             numRegn = size( rid2tlbr, 2 );
             buffSize = 5000;
-            thresh = -Inf; 2; 1; +Inf; 3; 0.4; 
             if ~numRegn, 
                 did2tlbr = zeros( 4, 0, 'single' ); 
                 did2out = zeros( numOutDim, 0, 'single' ); return; 
@@ -406,14 +405,12 @@ classdef AttNetCaffe2 < handle
                     dimTl = ( cid - 1 ) * numDimPerDirLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
                     dimBr = dimTl + numDimPerDirLyr;
-                    [ rid2stl, rid2ptl ] = max( rid2out( dimTl, : ), [  ], 1 );
-                    [ rid2sbr, rid2pbr ] = max( rid2out( dimBr, : ), [  ], 1 );
-                    rid2stl = rid2stl * 2 - sum( rid2out( dimTl, : ), 1 );
-                    rid2sbr = rid2sbr * 2 - sum( rid2out( dimBr, : ), 1 );
+                    [ ~, rid2ptl ] = max( rid2out( dimTl, : ), [  ], 1 );
+                    [ ~, rid2pbr ] = max( rid2out( dimBr, : ), [  ], 1 );
                     % Find and store detections.
                     rid2stop = rid2ptl == signStop & rid2pbr == signStop;
-                    rid2fgd = rid2pCls == cid;
-                    rid2det = rid2stop & rid2fgd;
+                    rid2istarget = rid2pCls == cid;
+                    rid2det = rid2stop & rid2istarget;
                     numDet = sum( rid2det );
                     dids = did : did + numDet - 1;
                     did2tlbr( :, dids ) = rid2tlbr( :, rid2det );
@@ -423,9 +420,8 @@ classdef AttNetCaffe2 < handle
                     % Find and store regiones to be continued.
                     rid2fgd2 = ...
                         ( rid2pCls ~= ( numCls + 1 ) ) & ...
-                        ( rid2ptl == 2 & rid2pbr == 2 ) & ...
-                        ( rid2stl > thresh & rid2sbr > thresh );
-                    rid2cont = ( rid2fgd | rid2fgd2 ) & ~rid2det;
+                        ( rid2ptl == 2 & rid2pbr == 2 );
+                    rid2cont = ( rid2istarget | rid2fgd2 ) & ~rid2det;
                     numCont = sum( rid2cont );
                     if ~numCont, continue; end;
                     idx2tlbr = rid2tlbr( :, rid2cont );
