@@ -52,7 +52,7 @@ classdef AttNetCaffe2 < handle
             caffe.set_mode_gpu(  );
             caffe.set_device( gpus - 1 );
             this.attNet = caffe.Net( netInfo.protoPath, netInfo.modelPath, 'test' );
-            prefix = 'prob';
+            prefix = 'dir';
             clsLyrPostFix = 'cls';
             cornerNameTl = 'TL';
             cornerNameBr = 'BR';
