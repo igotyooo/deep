@@ -139,6 +139,9 @@ classdef Db < handle
         function numObj = getNumTeObj( this )
             numObj = numel( this.getTeOids );
         end
+        function cid = cname2cid( this, cname )
+            cid = find( strcmp( cname, this.cid2name ) );
+        end;
         function cid2idxs = getCid2idxs( this, idx2iid )
             idx2cids = this.iid2cids( idx2iid );
             idx2cids = idx2cids( : );
@@ -272,7 +275,7 @@ classdef Db < handle
             fprintf( '%s: reduced to %s\n', ...
                 upper( mfilename ), upper( newDbName ) );
         end
-        function demoBbox( this, fid, iid )
+        function demoBbox( this, fid, position, iid )
             if nargin < 3, iid = ceil( rand * this.getNumIm ); end;
             oids = this.iid2oids{ iid };
             cids = this.oid2cid( oids );
@@ -282,6 +285,7 @@ classdef Db < handle
             figure( fid );
             plottlbr( bboxs, im, false, 'r', cnames );
             set( gcf, 'color', 'w' ); hold off;
+            setFigPos( gcf, position ); drawnow;
         end;
         % Functions for object identification.
         function name = getName( this )
