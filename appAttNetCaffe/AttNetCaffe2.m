@@ -1,4 +1,4 @@
-classdef AttNetCaffe2 < handle
+classdef AttNetCaffe3 < handle
     properties
         db;
         attNet;
@@ -12,7 +12,7 @@ classdef AttNetCaffe2 < handle
         settingPost;
     end
     methods( Access = public )
-        function this = AttNetCaffe2( ...
+        function this = AttNetCaffe3( ...
                 db, ...
                 propObj, ...
                 settingMain, ...
@@ -21,6 +21,8 @@ classdef AttNetCaffe2 < handle
             this.propObj = propObj;
             this.settingMain.rescaleBox = 1;
             this.settingMain.directionVectorSize = 30;
+            this.settingMain.numTopClassification = 1;
+            this.settingMain.numTopDirection = 1;
             this.settingMain.numMaxTest = 50;
             this.settingPost.mergingOverlap = 0.7;
             this.settingPost.mergingType = 'OV'; 'NMS';
@@ -85,7 +87,7 @@ classdef AttNetCaffe2 < handle
         end
         function [ rid2tlbr, rid2score, rid2cid ] = iid2det( this, iid )
             % Get initial proposals.
-            rid2tlbr0 = this.propObj.iid2det( iid );
+            [ rid2tlbr0, nid2rid0, nid2cid0 ] = this.propObj.iid2det( iid );
             % Pre-processing: box re-scaling.
             rescaleBox = this.settingMain.rescaleBox;
             rid2tlbr0 = scaleBoxes( rid2tlbr0, sqrt( rescaleBox ), sqrt( rescaleBox ) );
@@ -98,7 +100,7 @@ classdef AttNetCaffe2 < handle
             rid2tlbr0( 1 : 4, : ) = bsxfun( @minus, rid2tlbr0( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
             imGlobal = normalizeAndCropImage...
                 ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
-            [ rid2tlbr, rid2out ] = this.detMultiRegns( rid2tlbr0, imGlobal );
+            [ rid2tlbr, rid2out ] = this.detMultiRegns( rid2tlbr0, nid2rid0, nid2cid0, imGlobal );
             % Convert to original image domain.
             rid2tlbr = bsxfun( @minus, rid2tlbr, 1 - [ imTl; imTl; ] );
             if nargout,
@@ -174,8 +176,8 @@ classdef AttNetCaffe2 < handle
                 title( sprintf( 'Detection. (IID%06d)', iid ) );
             end;
         end
-        function demo2( this, fid, iid )
-            if nargin < 3,
+        function demo2( this, fid, position, iid )
+            if nargin < 4,
                 iid = this.db.getTeiids;
                 iid = randsample( iid', 1 );
             end;
@@ -192,6 +194,14 @@ classdef AttNetCaffe2 < handle
                 plottlbr( rid2tlbr( :, rid2ok ), im, false, { 'r'; 'g'; 'b'; 'y' } );
                 title( sprintf( '%s, IID%06d', this.db.cid2name{ cid }, iid ) );
                 hold off;
+                setFigPos( gcf, position ); drawnow;
+                waitforbuttonpress;
+                newrid2tlbr = ov( rid2tlbr( :, rid2ok ), ones( sum( rid2ok ), 1 )', 0.6, 1, 'WAVG' );
+                if isempty( newrid2tlbr ), continue; end;
+                plottlbr( round( newrid2tlbr ), im, false, 'c' );
+                title( sprintf( '%s, IID%06d', this.db.cid2name{ cid }, iid ) );
+                hold off;
+                setFigPos( gcf, position ); drawnow;
                 waitforbuttonpress;
             end;
         end
@@ -338,12 +348,14 @@ classdef AttNetCaffe2 < handle
             rid2tlbr = rid2tlbr( :, idx );
             rid2cid = rid2cid( idx );
         end
-        function [ did2tlbr, did2out ] = detMultiRegns( this, rid2tlbr, im )
+        function [ did2tlbr, did2out ] = detMultiRegns( this, rid2tlbr, nid2rid, nid2cid, im )
             % Preparing for data.
             testBatchSize = 256 / 2;
             numMaxFeed = this.settingMain.numMaxTest;
             interpolation = 'bilinear';
             dvecSize = this.settingMain.directionVectorSize;
+            numTopCls = this.settingMain.numTopClassification;
+            numTopDir = this.settingMain.numTopDirection;
             inputCh = size( im, 3 );
             numDimPerDirLyr = 4;
             numCls = this.db.getNumClass;
@@ -397,20 +409,37 @@ classdef AttNetCaffe2 < handle
                 end;
                 fprintf( '%s: Preproc t = %.2f sec, Fwd t = %.2f sec.\n', upper( mfilename ), trsiz, tfwd );
                 % Do the job.
-                nrid2tlbr = zeros( 4, buffSize, 'single' );
-                nrid2fill = false( 1, buffSize );
-                nrid2mcid = zeros( buffSize, 1, 'single' );
-                nrid = 1;
-                [ ~, rid2pCls ] = max( rid2out( dimCls, : ), [  ], 1 );
+                nrid2tlbr = cell( numCls, 1 );
+                signDiag = 2;
+                rid2outCls = rid2out( dimCls, : );
+                [ ~, rid2rank2pCls ] = sort( rid2outCls, 1, 'descend' );
+                rid2pCls = rid2rank2pCls( 1, : );
                 for cid = 1 : numCls,
                     dimTl = ( cid - 1 ) * numDimPerDirLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
                     dimBr = dimTl + numDimPerDirLyr;
-                    [ ~, rid2ptl ] = max( rid2out( dimTl, : ), [  ], 1 );
-                    [ ~, rid2pbr ] = max( rid2out( dimBr, : ), [  ], 1 );
+                    rid2outTl = rid2out( dimTl, : );
+                    rid2outBr = rid2out( dimBr, : );
+                    [ ~, rid2rank2ptl ] = sort( rid2outTl, 1, 'descend' );
+                    [ ~, rid2rank2pbr ] = sort( rid2outBr, 1, 'descend' );
+                    rid2ptl = rid2rank2ptl( 1, : );
+                    rid2pbr = rid2rank2pbr( 1, : );
+                    rid2ss = rid2ptl == signStop & rid2pbr == signStop;
+                    rid2okTl = any( rid2rank2ptl( 1 : numTopDir, : ) == signDiag, 1 );
+                    rid2okBr = any( rid2rank2pbr( 1 : numTopDir, : ) == signDiag, 1 );
+                    rid2dd = rid2okTl & rid2okBr;
+                    rid2dd = rid2dd & ( ~rid2ss );
+                    rid2dd = rid2dd & ( rid2ptl == signDiag | rid2pbr == signDiag );
+                    rid2bgd = rid2pCls == ( numCls + 1 );
+                    rid2high = any( rid2rank2pCls( 1 : numTopCls, : ) == cid, 1 );
+                    rid2high = rid2high & ( ~rid2bgd );
+                    rid2top = rid2pCls == cid;
+                    nid2purebred = nid2cid == cid;
+                    rid2purebred = false( 1, numRegn );
+                    rid2purebred( nid2rid( nid2purebred ) ) = true;
                     % Find and store detections.
-                    rid2stop = rid2ptl == signStop & rid2pbr == signStop;
-                    rid2det = rid2stop & rid2pCls == cid;
+                    rid2det = rid2ss & rid2top & rid2purebred;
+                    % rid2det = rid2ss & rid2high & rid2purebred;
                     numDet = sum( rid2det );
                     dids = did : did + numDet - 1;
                     did2tlbr( :, dids ) = rid2tlbr( :, rid2det );
@@ -418,18 +447,14 @@ classdef AttNetCaffe2 < handle
                     did2fill( dids ) = true;
                     did = did + numDet;
                     % Find and store regiones to be continued.
-                    rid2target = rid2pCls == cid;
-                    rid2cand = ...
-                        ( rid2pCls ~= cid ) & ...                       % Even if some regions are not classified to the this class,
-                        ( rid2pCls ~= ( numCls + 1 ) ) & ...            % but they are not background at least, 
-                        ( rid2ptl == 2 & rid2pbr == 2 );                % and predicted as diag/diag direction. We therefore regard them as candidates for this class.
-                    rid2cont = ( rid2target | rid2cand );
+                    rid2purebredCont = ( ~rid2det ) & rid2high & rid2purebred & ( ~rid2ss );
+                    rid2branchCont = rid2high & rid2dd & ~rid2purebred;
+                    rid2cont = rid2purebredCont | rid2branchCont;
                     numCont = sum( rid2cont );
                     if ~numCont, continue; end;
                     idx2tlbr = rid2tlbr( :, rid2cont );
                     idx2ptl = rid2ptl( rid2cont );
                     idx2pbr = rid2pbr( rid2cont );
-                    idx2cid = rid2pCls( rid2cont );
                     idx2tlbrWarp = [ ...
                         this.directions.did2vecTl( :, idx2ptl ) * dvecSize + 1; ...
                         this.directions.did2vecBr( :, idx2pbr ) * dvecSize + this.inputSide; ];
@@ -441,19 +466,15 @@ classdef AttNetCaffe2 < handle
                         idx2tlbr( :, idx ) = tlbr - 1 + ...
                             [ idx2tlbr( 1 : 2, idx ); idx2tlbr( 1 : 2, idx ) ];
                     end;
-                    nrids = nrid : nrid + numCont - 1;
-                    nrid2tlbr( :, nrids ) = idx2tlbr;
-                    nrid2mcid( nrids ) = idx2cid;
-                    nrid2fill( nrids ) = true;
-                    nrid = nrid + numCont;
+                    idx2tlbr = cat( 1, idx2tlbr, cid * ones( 1, numCont ) );
+                    nrid2tlbr{ cid } = idx2tlbr;
                 end;
-                nrid2tlbr = round( nrid2tlbr( :, nrid2fill ) );
-                nrid2mcid = nrid2mcid( nrid2fill );
-                foo = unique( [ nrid2tlbr', nrid2mcid ], 'rows', 'stable' );
-                rid2tlbr = foo( :, 1 : 4 )';
-                rid2mcid = foo( :, 5 );
+                rid2tlbr = round( cat( 2, nrid2tlbr{ : } ) );
+                if isempty( rid2tlbr ), break; end;
+                [ rid2tlbr_, ~, nid2rid ] = unique( rid2tlbr( 1 : 4, : )', 'rows' );
+                nid2cid = rid2tlbr( 5, : )';
+                rid2tlbr = rid2tlbr_';
                 numRegn = size( rid2tlbr, 2 );
-                if ~numRegn, break; end;
             end;
             did2tlbr = did2tlbr( :, did2fill );
             did2out = did2out( :, did2fill );

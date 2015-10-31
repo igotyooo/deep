@@ -1,4 +1,4 @@
-classdef PropObjCaffe2 < handle
+classdef PropObjCaffe3 < handle
     properties
         db;
         attNet;
@@ -7,17 +7,21 @@ classdef PropObjCaffe2 < handle
         stride;
         patchSide;
         lyid02lyid;
+        directions;
         scales;
         setting;
     end
     methods( Access = public )
-        function this = PropObjCaffe2( db, setting )
+        function this = PropObjCaffe3( db, setting )
             this.db = db;
             this.setting.normalizeImageMaxSide = 0;
             this.setting.numScaling = 24;
             this.setting.dilate = 1 / 4;
             this.setting.maximumImageSize = 9e6;
             this.setting.posIntOverRegnMoreThan = 1 / 3;
+            this.setting.numTopClassification = 1;
+            this.setting.numTopDirection = 1;
+            this.setting.directionVectorSize = 30;
             this.setting = setChanges...
                 ( this.setting, setting, upper( mfilename ) );
         end
@@ -26,6 +30,14 @@ classdef PropObjCaffe2 < handle
             maxSide = this.setting.normalizeImageMaxSide;
             numScaling = this.setting.numScaling;
             posIntOverRegnMoreThan = this.setting.posIntOverRegnMoreThan;
+            % Define directions.
+            fprintf( '%s: Define directions.\n', upper( mfilename ) );
+            numDirection = 3;
+            angstep = ( pi / 2 ) / ( numDirection - 1 );
+            did2angTl = ( 0 : angstep : ( pi / 2 ) )';
+            did2angBr = ( pi : angstep : ( pi * 3 / 2 ) )';
+            this.directions.did2vecTl = [ [ cos( did2angTl' ); sin( did2angTl' ); ], [ 0; 0; ] ];
+            this.directions.did2vecBr = [ [ cos( did2angBr' ); sin( did2angBr' ); ], [ 0; 0; ] ];
             % Fetch net on GPU.
             this.attNetName = netInfo.modelName;
             this.patchSide = netInfo.patchSide;
@@ -118,7 +130,7 @@ classdef PropObjCaffe2 < handle
                     'Prop obj.', cummt );
             end;
         end
-        function rid2tlbr = iid2det( this, iid )
+        function [ rid2tlbr, nid2rid, nid2cid ] = iid2det( this, iid )
             % Initial guess.
             fpath = this.getPath( iid );
             try
@@ -136,33 +148,64 @@ classdef PropObjCaffe2 < handle
             end;
             % Compute each region score.
             if nargout,
-                threshDir = 0.1;
+                dvecSize = this.setting.directionVectorSize;
+                numTopCls = this.setting.numTopClassification;
+                numTopDir = this.setting.numTopDirection;
                 numDimPerLyr = 4;
                 numCls = this.db.getNumClass;
                 numDimCls = numCls + 1;
                 dimCls = numCls * numDimPerLyr * 2 + ( 1 : numDimCls );
                 signDiag = 2;
+                signStop = 4;
                 rid2outCls = rid2out( dimCls, : );
-                [ ~, rid2pCls ] = max( rid2outCls, [  ], 1 );
+                [ ~, rid2rank2pCls ] = sort( rid2outCls, 1, 'descend' );
                 rid2tlbrProp = cell( numCls, 1 );
                 for cid = 1 : numCls,
-                    % Direction.
+                    % Direction: DD condition.
                     dimTl = ( cid - 1 ) * numDimPerLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerLyr - 1;
                     dimBr = dimTl + numDimPerLyr;
                     rid2outTl = rid2out( dimTl, : );
                     rid2outBr = rid2out( dimBr, : );
-                    rid2sTl = rid2outTl( signDiag, : ) * 2 - sum( rid2outTl, 1 );
-                    rid2sBr = rid2outBr( signDiag, : ) * 2 - sum( rid2outBr, 1 );
-                    rid2okTl = rid2sTl > threshDir;
-                    rid2okBr = rid2sBr > threshDir;
+                    [ ~, rid2rank2ptl ] = sort( rid2outTl, 1, 'descend' );
+                    [ ~, rid2rank2pbr ] = sort( rid2outBr, 1, 'descend' );
+                    rid2ptl = rid2rank2ptl( 1, : );
+                    rid2pbr = rid2rank2pbr( 1, : );
+                    rid2okTl = any( rid2rank2ptl( 1 : numTopDir, : ) == signDiag, 1 );
+                    rid2okBr = any( rid2rank2pbr( 1 : numTopDir, : ) == signDiag, 1 );
+                    rid2ss = rid2ptl == signStop & rid2pbr == signStop;
+                    rid2dd = rid2okTl & rid2okBr;
+                    rid2dd = rid2dd & ( ~rid2ss );
+                    rid2dd = rid2dd & ( rid2ptl == signDiag | rid2pbr == signDiag );
                     % Classification.
-                    rid2okCls = rid2pCls == cid;
-                    rid2ok = rid2okTl & rid2okBr & rid2okCls;
-                    rid2tlbrBff = rid2tlbr( 1 : 4, rid2ok );
-                    rid2tlbrProp{ cid } = rid2tlbrBff;
+                    rid2bgd = rid2rank2pCls( 1, : ) == ( numCls + 1 );
+                    rid2okCls = any( rid2rank2pCls( 1 : numTopCls, : ) == cid, 1 );
+                    rid2okCls = rid2okCls & ( ~rid2bgd );
+                    % Update.
+                    rid2cont = rid2dd & rid2okCls;
+                    numCont = sum( rid2cont );
+                    if ~numCont, continue; end;
+                    idx2tlbr = rid2tlbr( 1 : 4, rid2cont );
+                    idx2ptl = rid2ptl( rid2cont );
+                    idx2pbr = rid2pbr( rid2cont );
+                    idx2tlbrWarp = [ ...
+                        this.directions.did2vecTl( :, idx2ptl ) * dvecSize + 1; ...
+                        this.directions.did2vecBr( :, idx2pbr ) * dvecSize + this.patchSide; ];
+                    for idx = 1 : numCont,
+                        w = idx2tlbr( 4, idx ) - idx2tlbr( 2, idx ) + 1;
+                        h = idx2tlbr( 3, idx ) - idx2tlbr( 1, idx ) + 1;
+                        tlbrWarp = idx2tlbrWarp( :, idx );
+                        tlbr = resizeTlbr( tlbrWarp, [ this.patchSide, this.patchSide ], [ h, w ] );
+                        idx2tlbr( :, idx ) = tlbr - 1 + ...
+                            [ idx2tlbr( 1 : 2, idx ); idx2tlbr( 1 : 2, idx ) ];
+                    end;
+                    idx2tlbr = cat( 1, idx2tlbr, cid * ones( 1, numCont ) );
+                    rid2tlbrProp{ cid } = idx2tlbr;
                 end;
-                rid2tlbr = cat( 2, rid2tlbrProp{ : } );
+                rid2tlbr = round( cat( 2, rid2tlbrProp{ : } ) );
+                [ rid2tlbr_, ~, nid2rid ] = unique( rid2tlbr( 1 : 4, : )', 'rows' );
+                nid2cid = rid2tlbr( 5, : )';
+                rid2tlbr = rid2tlbr_';
             end;
         end
         function [ rid2out, rid2tlbr ] = im2det( this, im )
@@ -186,8 +229,8 @@ classdef PropObjCaffe2 < handle
             if size( rid2out, 2 ) ~= size( rid2tlbr, 2 ),
                 error( 'Inconsistent number of regions.\n' ); end;
         end
-        function demo( this, fid, wait, iid )
-            if nargin < 4,
+        function demo( this, fid, position, wait, iid )
+            if nargin < 5,
                 iid = this.db.getTeiids;
                 iid = randsample( iid', 1 );
             end;
@@ -195,7 +238,6 @@ classdef PropObjCaffe2 < handle
             rid2tlbr = this.iid2det( iid );
             rid2tlbr = round( rid2tlbr );
             figure( fid );
-            set( gcf, 'color', 'w' );
             if wait,
                 for rid = 1 : size( rid2tlbr, 2 ),
                     plottlbr( rid2tlbr( :, rid ), im, false, 'r' ); 
@@ -210,6 +252,8 @@ classdef PropObjCaffe2 < handle
                     size( rid2tlbr, 2 ), iid ) );
                 hold off;
             end;
+            set( gcf, 'color', 'w' );
+            setFigPos( gcf, position ); drawnow;
         end
         function rid2out = ...
                 extractDenseActivationsCaffe( ...
@@ -267,11 +311,11 @@ classdef PropObjCaffe2 < handle
             this.attNet.blobs( 'data' ).reshape( [ w, h, c, n ] );
             res = this.attNet.forward( im );
             res = cellfun( @( x )permute( x, [ 2, 1, 3, 4 ] ), res, 'UniformOutput', false );
-        end;
+        end
         % Functions for identification.
         function name = getName( this )
             name = sprintf( ...
-                'PROPCAF2_%s_OF_%s', ...
+                'PROPCAF3_%s_OF_%s', ...
                 this.setting.changes, ...
                 this.attNetName );
             name( strfind( name, '__' ) ) = '';
