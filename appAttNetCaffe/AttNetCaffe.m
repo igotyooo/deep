@@ -100,7 +100,7 @@ classdef AttNetCaffe < handle
             rid2tlbr0( 1 : 4, : ) = bsxfun( @minus, rid2tlbr0( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
             imGlobal = normalizeAndCropImage...
                 ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
-            [ rid2tlbr, rid2out ] = this.detMultiRegns( rid2tlbr0, nid2rid0, nid2cid0, imGlobal );
+            [ rid2tlbr, rid2out ] = this.detFromRegns( rid2tlbr0, nid2rid0, nid2cid0, imGlobal );
             % Convert to original image domain.
             rid2tlbr = bsxfun( @minus, rid2tlbr, 1 - [ imTl; imTl; ] );
             if nargout,
@@ -348,7 +348,7 @@ classdef AttNetCaffe < handle
             rid2tlbr = rid2tlbr( :, idx );
             rid2cid = rid2cid( idx );
         end
-        function [ did2tlbr, did2out ] = detMultiRegns( this, rid2tlbr, nid2rid, nid2cid, im )
+        function [ did2tlbr, did2out ] = detFromRegns( this, rid2tlbr, nid2rid, nid2cid, im )
             % Preparing for data.
             testBatchSize = 256 / 2;
             numMaxFeed = this.settingMain.numMaxTest;
