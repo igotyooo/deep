@@ -1,4 +1,4 @@
-classdef PropObjCaffe3 < handle
+classdef PropObjCaffe < handle
     properties
         db;
         attNet;
@@ -12,7 +12,7 @@ classdef PropObjCaffe3 < handle
         setting;
     end
     methods( Access = public )
-        function this = PropObjCaffe3( db, setting )
+        function this = PropObjCaffe( db, setting )
             this.db = db;
             this.setting.normalizeImageMaxSide = 0;
             this.setting.numScaling = 24;
@@ -315,7 +315,7 @@ classdef PropObjCaffe3 < handle
         % Functions for identification.
         function name = getName( this )
             name = sprintf( ...
-                'PROPCAF3_%s_OF_%s', ...
+                'PROPCAF_%s_OF_%s', ...
                 this.setting.changes, ...
                 this.attNetName );
             name( strfind( name, '__' ) ) = '';

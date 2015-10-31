@@ -54,13 +54,13 @@ end;
 netInfo.patchSide = 223;
 netInfo.stride = 32;
 
-prop = PropObjCaffe3( db, setting.propObj );
+prop = PropObjCaffe( db, setting.propObj );
 prop.init( netInfo, setting.gpus );
 prop.demo( 2, [ 3, 4, 1, 3 ], false, iid );
 caffe.reset_all(  );
 
 netInfo.patchSide = 224; 
-det0 = AttNetCaffe3( db, prop, setting.det0.main, setting.det0.post ); clear prop;
+det0 = AttNetCaffe( db, prop, setting.det0.main, setting.det0.post ); clear prop;
 det0.init( netInfo, setting.gpus );
 det0.demo2( 3, [ 3, 4, 1, 4 ], iid );
 caffe.reset_all(  );
