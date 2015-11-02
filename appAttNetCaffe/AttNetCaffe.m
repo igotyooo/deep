@@ -375,12 +375,14 @@ classdef AttNetCaffe < handle
             numTopCls = this.settingMain.numTopClassification;
             numTopDir = this.settingMain.numTopDirection;
             inputCh = size( im, 3 );
+            cidx2cid = unique( nid2cid );
+            numTarCls = numel( cidx2cid );
             numDimPerDirLyr = 4;
-            numCls = this.db.getNumClass;
-            numDimClsLyr = numCls + 1;
-            numOutDim = ( numDimPerDirLyr * 2 ) * numCls + numDimClsLyr;
+            numDimClsLyr = numTarCls + 1;
+            numOutDim = ( numDimPerDirLyr * 2 ) * numTarCls + numDimClsLyr;
+            dimCls = numTarCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
             signStop = numDimPerDirLyr;
-            dimCls = numCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
+            signDiag = 2;
             numRegn = size( rid2tlbr, 2 );
             buffSize = 5000;
             if ~numRegn, 
@@ -415,22 +417,21 @@ classdef AttNetCaffe < handle
                             ( imRegn, [ this.inputSide, this.inputSide ], 'method', interpolation );
                     end;
                     trsiz = trsiz + toc( trsiz_ );
-                    % Feedforward.
                     tfwd_ = tic;
-                    brid2out = this.feedforwardCaffe( brid2im );
+                    brid2out = this.feedforwardCaffe( brid2im, cidx2cid );
                     brid2out = permute( brid2out, [ 3, 4, 1, 2 ] );
                     rid2out( :, rids ) = brid2out;
                     tfwd = tfwd + toc( tfwd_ );
                 end;
                 fprintf( '%s: Preproc t = %.2f sec, Fwd t = %.2f sec.\n', upper( mfilename ), trsiz, tfwd );
                 % Do the job.
-                nrid2tlbr = cell( numCls, 1 );
-                signDiag = 2;
+                nrid2tlbr = cell( numTarCls, 1 );
                 rid2outCls = rid2out( dimCls, : );
-                [ ~, rid2rank2pCls ] = sort( rid2outCls, 1, 'descend' );
-                rid2pCls = rid2rank2pCls( 1, : );
-                for cid = 1 : numCls,
-                    dimTl = ( cid - 1 ) * numDimPerDirLyr * 2 + 1;
+                [ ~, rid2rank2cidx ] = sort( rid2outCls, 1, 'descend' );
+                rid2cidx = rid2rank2cidx( 1, : );
+                for cidx = 1 : numTarCls,
+                    cid = cidx2cid( cidx );
+                    dimTl = ( cidx - 1 ) * numDimPerDirLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
                     dimBr = dimTl + numDimPerDirLyr;
                     rid2outTl = rid2out( dimTl, : );
@@ -445,10 +446,10 @@ classdef AttNetCaffe < handle
                     rid2dd = rid2okTl & rid2okBr;
                     rid2dd = rid2dd & ( ~rid2ss );
                     rid2dd = rid2dd & ( rid2ptl == signDiag | rid2pbr == signDiag );
-                    rid2bgd = rid2pCls == ( numCls + 1 );
-                    rid2high = any( rid2rank2pCls( 1 : numTopCls, : ) == cid, 1 );
+                    rid2bgd = rid2cidx == ( numTarCls + 1 );
+                    rid2high = any( rid2rank2cidx( 1 : min( numTopCls, numDimClsLyr ), : ) == cidx, 1 );
                     rid2high = rid2high & ( ~rid2bgd );
-                    rid2top = rid2pCls == cid;
+                    rid2top = rid2cidx == cidx;
                     nid2purebred = nid2cid == cid;
                     rid2purebred = false( 1, numRegn );
                     rid2purebred( nid2rid( nid2purebred ) ) = true;
@@ -461,9 +462,9 @@ classdef AttNetCaffe < handle
                     didx2outTl = rid2outTl( :, rid2det );
                     didx2outBr = rid2outBr( :, rid2det );
                     didx2outCls = rid2outCls( :, rid2det );
-                    didx2scoreTl = didx2outTl( signStop, : ) * 2 - sum( didx2outTl, 1 );
-                    didx2scoreBr = didx2outBr( signStop, : ) * 2 - sum( didx2outBr, 1 );
-                    didx2scoreCls = didx2outCls( cid, : ) * 2 - sum( didx2outCls, 1 );
+                    didx2scoreTl = didx2outTl( signStop, : );
+                    didx2scoreBr = didx2outBr( signStop, : );
+                    didx2scoreCls = didx2outCls( cidx, : );
                     did2score( dids ) = ( didx2scoreTl + didx2scoreBr ) / 2 + didx2scoreCls;
                     did2fill( dids ) = true;
                     did = did + numDet;
@@ -488,7 +489,7 @@ classdef AttNetCaffe < handle
                             [ idx2tlbr( 1 : 2, idx ); idx2tlbr( 1 : 2, idx ) ];
                     end;
                     idx2tlbr = cat( 1, idx2tlbr, cid * ones( 1, numCont ) );
-                    nrid2tlbr{ cid } = idx2tlbr;
+                    nrid2tlbr{ cidx } = idx2tlbr;
                 end;
                 rid2tlbr = round( cat( 2, nrid2tlbr{ : } ) );
                 if isempty( rid2tlbr ), break; end;
@@ -630,8 +631,14 @@ classdef AttNetCaffe < handle
             did2score = did2score( did2fill );
             did2cid = did2cid( did2fill );
         end
-        function y = feedforwardCaffe( this, im )
-            
+        function y = feedforwardCaffe( this, im, cidx2cid )
+            cidx2cid = cidx2cid( : );
+            numCls = this.db.getNumClass;
+            targetDimDir = bsxfun( @plus, repmat( ( cidx2cid' - 1 ) * 4 * 2, 4 * 2, 1 ), ( 1 : ( 4 * 2 ) )' );
+            targetDimCls = [ cidx2cid; numCls + 1; ] + 4 * 2 * numCls;
+            targetDim = [ targetDimDir( : ); targetDimCls; ];
+            weight = this.weights( :, :, :, targetDim );
+            bias = this.biases( :, targetDim );
             [ h, w, c, n ] = size( im );
             im = im( :, :, [ 3, 2, 1 ], : );
             im = permute( im, [ 2, 1, 3, 4 ] );
@@ -642,7 +649,7 @@ classdef AttNetCaffe < handle
             x = x{ 1 };
             x = permute( x, [ 2, 1, 3, 4 ] );
             x = gpuArray( x );
-            y = vl_nnconv( x, this.weights, this.biases, 'pad', 0, 'stride', 1 );
+            y = vl_nnconv( x, weight, bias, 'pad', 0, 'stride', 1 );
             y = gather( y );
             clear x;
         end
