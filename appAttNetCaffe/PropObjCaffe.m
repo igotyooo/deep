@@ -132,46 +132,33 @@ classdef PropObjCaffe < handle
             end;
         end
         function [ rid2tlbr, nid2rid, nid2cid ] = iid2det( this, iid, cids )
-            % Initial guess.
             fpath = this.getPath( iid );
-            numDimPerLyr = 4;
-            numCls = this.db.getNumClass;
-            bgdid = numCls + 1;
-            dimCls = numCls * numDimPerLyr * 2 + ( 1 : bgdid );
             try
                 data = load( fpath );
-                rid2tlbr = data.prop.rid2tlbr;
-                rid2out = data.prop.rid2out;
+                rid2tlbr = data.rid2tlbr;
+                nid2rid = data.nid2rid;
+                nid2cid = data.nid2cid;
             catch
+                % Initial guess.
                 im = imread( this.db.iid2impath{ iid } );
-                [ rid2out, rid2tlbr ] = ...
-                    this.im2det( im );
-                rid2outCls = rid2out( dimCls, : );
-                [ ~, rid2cid ] = max( rid2outCls, [  ], 1 );
-                rid2fgd = rid2cid ~= bgdid;
-                rid2tlbr = rid2tlbr( :, rid2fgd );
-                rid2out = rid2out( :, rid2fgd );
-                prop.rid2tlbr = rid2tlbr;
-                prop.rid2out = rid2out;
-                this.makeDir;
-                save( fpath, 'prop' );
-            end;
-            % Compute each region score.
-            if nargout,
+                [ rid2out, rid2tlbr ] = this.im2det( im ); % For localization, cids should be intput to this function.
+                % Compute each region score.
                 dvecSize = this.setting.directionVectorSize;
                 numTopCls = this.setting.numTopClassification;
                 numTopDir = this.setting.numTopDirection;
-                signDiag = 2;
+                numCls = this.db.getNumClass;
                 signStop = 4;
+                signDiag = 2;
+                dimCls = numCls * signStop * 2 + ( 1 : ( numCls + 1 ) );
                 rid2outCls = rid2out( dimCls, : );
                 [ ~, rid2rank2cid ] = sort( rid2outCls, 1, 'descend' );
                 rid2tlbrProp = cell( numCls, 1 );
                 if nargin < 3, cids = 1 : numCls; else cids = cids( : )'; end;
                 for cid = cids,
                     % Direction: DD condition.
-                    dimTl = ( cid - 1 ) * numDimPerLyr * 2 + 1;
-                    dimTl = dimTl : dimTl + numDimPerLyr - 1;
-                    dimBr = dimTl + numDimPerLyr;
+                    dimTl = ( cid - 1 ) * signStop * 2 + 1;
+                    dimTl = dimTl : dimTl + signStop - 1;
+                    dimBr = dimTl + signStop;
                     rid2outTl = rid2out( dimTl, : );
                     rid2outBr = rid2out( dimBr, : );
                     [ ~, rid2rank2ptl ] = sort( rid2outTl, 1, 'descend' );
@@ -213,6 +200,9 @@ classdef PropObjCaffe < handle
                 [ rid2tlbr_, ~, nid2rid ] = unique( rid2tlbr( 1 : 4, : )', 'rows' );
                 nid2cid = rid2tlbr( 5, : )';
                 rid2tlbr = rid2tlbr_';
+                % Save data.
+                this.makeDir;
+                save( fpath, 'rid2tlbr', 'nid2rid', 'nid2cid' );
             end;
         end
         function [ rid2out, rid2tlbr ] = im2det( this, im )
@@ -247,7 +237,7 @@ classdef PropObjCaffe < handle
             figure( fid );
             if wait,
                 for rid = 1 : size( rid2tlbr, 2 ),
-                    plottlbr( rid2tlbr( :, rid ), im, false, 'r' ); 
+                    plottlbr( rid2tlbr( :, rid ), im, false, 'r' );
                     title( sprintf( 'Object proposal: %d/%d regions. (IID%06d)', ...
                         rid, size( rid2tlbr, 2 ), iid ) );
                     hold off;
@@ -269,7 +259,7 @@ classdef PropObjCaffe < handle
             figure( fid );
             if wait,
                 for rid = 1 : size( rid2tlbr, 2 ),
-                    plottlbr( rid2tlbr( :, rid ), im, false, 'r' ); 
+                    plottlbr( rid2tlbr( :, rid ), im, false, 'r' );
                     title( sprintf( 'Object proposal: %d/%d regions. (IID%06d)', ...
                         rid, size( rid2tlbr, 2 ), iid ) );
                     hold off;
@@ -353,8 +343,8 @@ classdef PropObjCaffe < handle
         end
         function dir = getDir( this )
             name = this.getName;
-            if length( name ) > 150, 
-                name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) ); 
+            if length( name ) > 150,
+                name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) );
                 name = sprintf( '%010d', name );
                 name = strcat( 'PROP_', name );
             end
