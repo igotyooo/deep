@@ -5,7 +5,8 @@ classdef AttNetCaffe < handle
         attNetName;
         rgbMean;
         inputSide;
-        lyid02lyid;
+        weights;
+        biases;
         propObj;
         directions;
         settingMain;
@@ -46,44 +47,44 @@ classdef AttNetCaffe < handle
             did2angBr = ( pi : angstep : ( pi * 3 / 2 ) )';
             this.directions.did2vecTl = [ [ cos( did2angTl' ); sin( did2angTl' ); ], [ 0; 0; ] ];
             this.directions.did2vecBr = [ [ cos( did2angBr' ); sin( did2angBr' ); ], [ 0; 0; ] ];
-            % Fetch net on GPU.
+            % Fetch output layer's parameters on GPU.
             this.attNetName = netInfo.modelName;
             this.inputSide = netInfo.patchSide;
             this.rgbMean = load( netInfo.rgbMeanPath, 'rgbMean' );
             this.rgbMean = this.rgbMean.rgbMean;
             caffe.set_mode_gpu(  );
             caffe.set_device( gpus - 1 );
-            this.attNet = caffe.Net( netInfo.protoPath, netInfo.modelPath, 'test' );
+            net = caffe.Net( netInfo.protoPath, netInfo.modelPath, 'test' );
             prefix = 'dir';
-            clsLyrPostFix = 'cls';
+            clsLyrName = 'cls';
             cornerNameTl = 'TL';
             cornerNameBr = 'BR';
             numCls = this.db.getNumClass;
-            numLyr = numel( this.attNet.outputs );
-            this.lyid02lyid = zeros( numLyr, 1 );
-            for lyid = 1 : numLyr,
-                lname = this.attNet.outputs{ lyid };
-                if strcmp( lname( end - 2 : end ), clsLyrPostFix ),
-                    lyid0 = numCls * 2 + 1;
-                    this.lyid02lyid( lyid0 ) = lyid;
-                    continue;
+            numLyr = numCls * 2 + 1;
+            mlid2clid = zeros( numLyr, 1 );
+            mlid2name = cell( numLyr, 1 );
+            mlid2w = cell( numLyr, 1 );
+            mlid2b = cell( numLyr, 1 );
+            for lid = 1 : numLyr,
+                if lid == numLyr,
+                    lname = clsLyrName;
+                else
+                    if mod( lid, 2 ), cornerName = cornerNameTl; else cornerName = cornerNameBr;  end;
+                    lname = sprintf( '%s%d_%s', prefix, ( ( lid - 1 ) - mod( lid - 1, 2 ) ) / 2, cornerName );
                 end;
-                data = textscan( lname, strcat( prefix, '%d_%s' ) );
-                cid = data{ 1 } + 1;
-                cornerName = data{ 2 }{ : };
-                switch cornerName,
-                    case cornerNameTl,
-                        bias = 1;
-                    case cornerNameBr,
-                        bias = 2;
-                    otherwise,
-                        error( 'Strange corner name.\n' );
-                end;
-                lyid0 = ( cid - 1 ) * 2 + bias;
-                this.lyid02lyid( lyid0 ) = lyid;
+                mlid2clid( lid ) = net.name2layer_index( lname );
+                mlid2name{ lid } = lname;
+                mlid2w{ lid } = net.params( lname, 1 ).get_data(  );
+                mlid2b{ lid } = net.params( lname, 2 ).get_data(  );
+                mlid2b{ lid } = mlid2b{ lid }';
             end;
-            if numel( unique( this.lyid02lyid ) ) ~= numCls * 2 + 1, 
-                error( 'Wrong net output layer.\n' ); end;
+            this.weights = gpuArray( cat( 4, mlid2w{ : } ) );
+            this.biases = gpuArray( cat( 2, mlid2b{ : } ) );
+            % Fetch att net on GPU without the output layer.
+            caffe.reset_all(  );
+            caffe.set_mode_gpu(  );
+            caffe.set_device( gpus - 1 );
+            this.attNet = caffe.Net( netInfo.protoPathTest, netInfo.modelPath, 'test' );
         end
         function [ rid2tlbr, rid2score, rid2cid ] = iid2det( this, iid )
             % Get initial proposals.
@@ -416,14 +417,8 @@ classdef AttNetCaffe < handle
                     trsiz = trsiz + toc( trsiz_ );
                     % Feedforward.
                     tfwd_ = tic;
-                    lyid2out = this.feedforwardCaffe( brid2im );
-                    lyid02out = lyid2out( this.lyid02lyid );
-                    for lyid0 = 1 : numel( lyid02out ),
-                        out = lyid02out{ lyid0 };
-                        out = permute( out, [ 3, 4, 1, 2 ] );
-                        lyid02out{ lyid0 } = out;
-                    end;
-                    brid2out = cat( 1, lyid02out{ : } );
+                    brid2out = this.feedforwardCaffe( brid2im );
+                    brid2out = permute( brid2out, [ 3, 4, 1, 2 ] );
                     rid2out( :, rids ) = brid2out;
                     tfwd = tfwd + toc( tfwd_ );
                 end;
@@ -557,14 +552,8 @@ classdef AttNetCaffe < handle
                     trsiz = trsiz + toc( trsiz_ );
                     % Feedforward.
                     tfwd_ = tic;
-                    lyid2out = this.feedforwardCaffe( brid2im );
-                    lyid02out = lyid2out( this.lyid02lyid );
-                    for lyid0 = 1 : numel( lyid02out ),
-                        out = lyid02out{ lyid0 };
-                        out = permute( out, [ 3, 4, 1, 2 ] );
-                        lyid02out{ lyid0 } = out;
-                    end;
-                    brid2out = cat( 1, lyid02out{ : } );
+                    brid2out = this.feedforwardCaffe( brid2im );
+                    brid2out = permute( brid2out, [ 3, 4, 1, 2 ] );
                     rid2out( :, rids ) = brid2out;
                     tfwd = tfwd + toc( tfwd_ );
                 end;
@@ -641,14 +630,21 @@ classdef AttNetCaffe < handle
             did2score = did2score( did2fill );
             did2cid = did2cid( did2fill );
         end
-        function res = feedforwardCaffe( this, im )
+        function y = feedforwardCaffe( this, im )
+            
             [ h, w, c, n ] = size( im );
             im = im( :, :, [ 3, 2, 1 ], : );
             im = permute( im, [ 2, 1, 3, 4 ] );
             im = { im };
             this.attNet.blobs( 'data' ).reshape( [ w, h, c, n ] );
-            res = this.attNet.forward( im );
-            res = cellfun( @( x )permute( x, [ 2, 1, 3, 4 ] ), res, 'UniformOutput', false );
+            x = this.attNet.forward( im );
+            if numel( x ) > 1, error( 'Output should be a single.' ); end;
+            x = x{ 1 };
+            x = permute( x, [ 2, 1, 3, 4 ] );
+            x = gpuArray( x );
+            y = vl_nnconv( x, this.weights, this.biases, 'pad', 0, 'stride', 1 );
+            y = gather( y );
+            clear x;
         end
     end
 end
