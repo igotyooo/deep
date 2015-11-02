@@ -130,9 +130,13 @@ classdef PropObjCaffe < handle
                     'Prop obj.', cummt );
             end;
         end
-        function [ rid2tlbr, nid2rid, nid2cid ] = iid2det( this, iid )
+        function [ rid2tlbr, nid2rid, nid2cid ] = iid2det( this, iid, cids )
             % Initial guess.
             fpath = this.getPath( iid );
+            numDimPerLyr = 4;
+            numCls = this.db.getNumClass;
+            bgdid = numCls + 1;
+            dimCls = numCls * numDimPerLyr * 2 + ( 1 : bgdid );
             try
                 data = load( fpath );
                 rid2tlbr = data.prop.rid2tlbr;
@@ -141,6 +145,11 @@ classdef PropObjCaffe < handle
                 im = imread( this.db.iid2impath{ iid } );
                 [ rid2out, rid2tlbr ] = ...
                     this.im2det( im );
+                rid2outCls = rid2out( dimCls, : );
+                [ ~, rid2cid ] = max( rid2outCls, [  ], 1 );
+                rid2fgd = rid2cid ~= bgdid;
+                rid2tlbr = rid2tlbr( :, rid2fgd );
+                rid2out = rid2out( :, rid2fgd );
                 prop.rid2tlbr = rid2tlbr;
                 prop.rid2out = rid2out;
                 this.makeDir;
@@ -151,16 +160,13 @@ classdef PropObjCaffe < handle
                 dvecSize = this.setting.directionVectorSize;
                 numTopCls = this.setting.numTopClassification;
                 numTopDir = this.setting.numTopDirection;
-                numDimPerLyr = 4;
-                numCls = this.db.getNumClass;
-                numDimCls = numCls + 1;
-                dimCls = numCls * numDimPerLyr * 2 + ( 1 : numDimCls );
                 signDiag = 2;
                 signStop = 4;
                 rid2outCls = rid2out( dimCls, : );
-                [ ~, rid2rank2pCls ] = sort( rid2outCls, 1, 'descend' );
+                [ ~, rid2rank2cid ] = sort( rid2outCls, 1, 'descend' );
                 rid2tlbrProp = cell( numCls, 1 );
-                for cid = 1 : numCls,
+                if nargin < 3, cids = 1 : numCls; else cids = cids( : )'; end;
+                for cid = cids,
                     % Direction: DD condition.
                     dimTl = ( cid - 1 ) * numDimPerLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerLyr - 1;
@@ -178,8 +184,8 @@ classdef PropObjCaffe < handle
                     rid2dd = rid2dd & ( ~rid2ss );
                     rid2dd = rid2dd & ( rid2ptl == signDiag | rid2pbr == signDiag );
                     % Classification.
-                    rid2bgd = rid2rank2pCls( 1, : ) == ( numCls + 1 );
-                    rid2okCls = any( rid2rank2pCls( 1 : numTopCls, : ) == cid, 1 );
+                    rid2bgd = rid2rank2cid( 1, : ) == ( numCls + 1 );
+                    rid2okCls = any( rid2rank2cid( 1 : numTopCls, : ) == cid, 1 );
                     rid2okCls = rid2okCls & ( ~rid2bgd );
                     % Update.
                     rid2cont = rid2dd & rid2okCls;
@@ -236,6 +242,28 @@ classdef PropObjCaffe < handle
             end;
             im = imread( this.db.iid2impath{ iid } );
             rid2tlbr = this.iid2det( iid );
+            rid2tlbr = round( rid2tlbr );
+            figure( fid );
+            if wait,
+                for rid = 1 : size( rid2tlbr, 2 ),
+                    plottlbr( rid2tlbr( :, rid ), im, false, 'r' ); 
+                    title( sprintf( 'Object proposal: %d/%d regions. (IID%06d)', ...
+                        rid, size( rid2tlbr, 2 ), iid ) );
+                    hold off;
+                    waitforbuttonpress;
+                end;
+            else
+                plottlbr( rid2tlbr, im, false, { 'r'; 'g'; 'b'; 'y' } );
+                title( sprintf( 'Object proposal: %d regions. (IID%06d)', ...
+                    size( rid2tlbr, 2 ), iid ) );
+                hold off;
+            end;
+            set( gcf, 'color', 'w' );
+            setFigPos( gcf, position ); drawnow;
+        end
+        function demoGivenCls( this, fid, position, wait, iid, cids )
+            im = imread( this.db.iid2impath{ iid } );
+            rid2tlbr = this.iid2det( iid, cids );
             rid2tlbr = round( rid2tlbr );
             figure( fid );
             if wait,

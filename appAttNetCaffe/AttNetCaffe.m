@@ -100,50 +100,36 @@ classdef AttNetCaffe < handle
             rid2tlbr0( 1 : 4, : ) = bsxfun( @minus, rid2tlbr0( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
             imGlobal = normalizeAndCropImage...
                 ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
-            [ rid2tlbr, rid2out ] = this.detFromRegns( rid2tlbr0, nid2rid0, nid2cid0, imGlobal );
+            [ rid2tlbr, rid2score, rid2cid ] = this.detFromRegns( rid2tlbr0, nid2rid0, nid2cid0, imGlobal );
             % Convert to original image domain.
             rid2tlbr = bsxfun( @minus, rid2tlbr, 1 - [ imTl; imTl; ] );
             if nargout,
-                % Compute each region score.
-                buffSize = 5000;
-                numDimPerDirLyr = 4;
-                numCls = this.db.getNumClass;
-                numDimClsLyr = numCls + 1;
-                signStop = numDimPerDirLyr;
-                dimCls = numCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
-                did2tlbr = zeros( 4, buffSize, 'single' );
-                did2score = zeros( 1, buffSize, 'single' );
-                did2cid = zeros( 1, buffSize, 'single' );
-                did2fill = false( 1, buffSize );
-                did = 1;
-                for cid = 1 : numCls,
-                    dimTl = ( cid - 1 ) * numDimPerDirLyr * 2 + 1;
-                    dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
-                    dimBr = dimTl + numDimPerDirLyr;
-                    rid2outTl = rid2out( dimTl, : );
-                    rid2outBr = rid2out( dimBr, : );
-                    rid2outCls = rid2out( dimCls, : );
-                    [ rid2stl, rid2ptl ] = max( rid2outTl, [  ], 1 );
-                    [ rid2sbr, rid2pbr ] = max( rid2outBr, [  ], 1 );
-                    [ rid2sCls, rid2pCls ] = max( rid2outCls, [  ], 1 );
-                    rid2stl = rid2stl * 2 - sum( rid2outTl, 1 );
-                    rid2sbr = rid2sbr * 2 - sum( rid2outBr, 1 );
-                    rid2sCLs = rid2sCls * 2 - sum( rid2outCls, 1 );
-                    rid2s = ( rid2stl + rid2sbr ) / 2 + rid2sCLs;
-                    rid2stop = rid2ptl == signStop & rid2pbr == signStop;
-                    rid2fgd = rid2pCls == cid;
-                    rid2ok = rid2stop & rid2fgd;
-                    numDet = sum( rid2ok );
-                    dids = did : did + numDet - 1;
-                    did2tlbr( :, dids ) = rid2tlbr( :, rid2ok );
-                    did2score( dids ) = rid2s( rid2ok );
-                    did2cid( dids ) = cid;
-                    did2fill( dids ) = true;
-                    did = did + numDet;
+                % Post-processing: merge bounding boxes.
+                if this.settingPost.mergingOverlap ~= 1,
+                    [ rid2tlbr, rid2score, rid2cid ] = ...
+                        this.merge( rid2tlbr, rid2score, rid2cid );
                 end;
-                rid2tlbr = did2tlbr( :, did2fill );
-                rid2score = did2score( :, did2fill );
-                rid2cid = did2cid( :, did2fill );
+            end;
+        end
+        function [ rid2tlbr, rid2score, rid2cid ] = iid2detFromCls( this, iid, cids )
+            % Get initial proposals.
+            [ rid2tlbr0, nid2rid0, nid2cid0 ] = this.propObj.iid2det( iid, cids );
+            % Pre-processing: box re-scaling.
+            rescaleBox = this.settingMain.rescaleBox;
+            rid2tlbr0 = scaleBoxes( rid2tlbr0, sqrt( rescaleBox ), sqrt( rescaleBox ) );
+            rid2tlbr0 = round( rid2tlbr0 );
+            % Do detection on each region.
+            interpolation = 'bilinear';
+            im = imread( this.db.iid2impath{ iid } );
+            imTl = min( rid2tlbr0( 1 : 2, : ), [  ], 2 );
+            imBr = max( rid2tlbr0( 3 : 4, : ), [  ], 2 );
+            rid2tlbr0( 1 : 4, : ) = bsxfun( @minus, rid2tlbr0( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
+            imGlobal = normalizeAndCropImage...
+                ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
+            [ rid2tlbr, rid2score, rid2cid ] = this.detFromRegnsAndCls( rid2tlbr0, nid2rid0, nid2cid0, imGlobal );
+            % Convert to original image domain.
+            rid2tlbr = bsxfun( @minus, rid2tlbr, 1 - [ imTl; imTl; ] );
+            if nargout,
                 % Post-processing: merge bounding boxes.
                 if this.settingPost.mergingOverlap ~= 1,
                     [ rid2tlbr, rid2score, rid2cid ] = ...
@@ -182,7 +168,38 @@ classdef AttNetCaffe < handle
                 iid = randsample( iid', 1 );
             end;
             im = imread( this.db.iid2impath{ iid } );
+            tic;
             [ rid2tlbr, ~, rid2cid ] = this.iid2det( iid );
+            toc;
+            rid2tlbr = round( rid2tlbr );
+            cids = unique( rid2cid );
+            numCls = numel( cids );
+            figure( fid );
+            set( gcf, 'color', 'w' );
+            for c = 1 : numCls,
+                cid = cids( c );
+                rid2ok = rid2cid == cid;
+                plottlbr( rid2tlbr( :, rid2ok ), im, false, { 'r'; 'g'; 'b'; 'y' } );
+                title( sprintf( '%s, IID%06d', this.db.cid2name{ cid }, iid ) );
+                hold off;
+                setFigPos( gcf, position ); drawnow;
+                waitforbuttonpress;
+                newrid2tlbr = ov( rid2tlbr( :, rid2ok ), ones( sum( rid2ok ), 1 )', 0.6, 1, 'WAVG' );
+                if isempty( newrid2tlbr ), continue; end;
+                plottlbr( round( newrid2tlbr ), im, false, 'c' );
+                title( sprintf( '%s, IID%06d', this.db.cid2name{ cid }, iid ) );
+                hold off;
+                setFigPos( gcf, position ); drawnow;
+                waitforbuttonpress;
+            end;
+        end
+        function demo3( this, fid, position, iid, cids )
+            if nargin < 4,
+                iid = this.db.getTeiids;
+                iid = randsample( iid', 1 );
+            end;
+            im = imread( this.db.iid2impath{ iid } );
+            [ rid2tlbr, ~, rid2cid ] = this.iid2detFromCls( iid, cids );
             rid2tlbr = round( rid2tlbr );
             cids = unique( rid2cid );
             numCls = numel( cids );
@@ -348,7 +365,7 @@ classdef AttNetCaffe < handle
             rid2tlbr = rid2tlbr( :, idx );
             rid2cid = rid2cid( idx );
         end
-        function [ did2tlbr, did2out ] = detFromRegns( this, rid2tlbr, nid2rid, nid2cid, im )
+        function [ did2tlbr, did2score, did2cid ] = detFromRegns( this, rid2tlbr, nid2rid, nid2cid, im )
             % Preparing for data.
             testBatchSize = 256 / 2;
             numMaxFeed = this.settingMain.numMaxTest;
@@ -367,11 +384,14 @@ classdef AttNetCaffe < handle
             buffSize = 5000;
             if ~numRegn, 
                 did2tlbr = zeros( 4, 0, 'single' ); 
-                did2out = zeros( numOutDim, 0, 'single' ); return; 
+                did2score = zeros( 0, 1, 'single' ); 
+                did2cid = zeros( 0, 1, 'single' ); 
+                return; 
             end;
             % Detection on each region.
             did2tlbr = zeros( 4, buffSize, 'single' );
-            did2out = zeros( numOutDim, buffSize, 'single' );
+            did2score = zeros( buffSize, 1, 'single' );
+            did2cid = zeros( buffSize, 1, 'single' );
             did2fill = false( 1, buffSize );
             did = 1;
             for feed = 1 : numMaxFeed,
@@ -438,12 +458,18 @@ classdef AttNetCaffe < handle
                     rid2purebred = false( 1, numRegn );
                     rid2purebred( nid2rid( nid2purebred ) ) = true;
                     % Find and store detections.
-                    rid2det = rid2ss & rid2top & rid2purebred;
-                    % rid2det = rid2ss & rid2high & rid2purebred;
+                    rid2det = rid2ss & rid2purebred & rid2top; 
                     numDet = sum( rid2det );
                     dids = did : did + numDet - 1;
                     did2tlbr( :, dids ) = rid2tlbr( :, rid2det );
-                    did2out( :, dids ) = rid2out( :, rid2det );
+                    did2cid( dids ) = cid;
+                    didx2outTl = rid2outTl( :, rid2det );
+                    didx2outBr = rid2outBr( :, rid2det );
+                    didx2outCls = rid2outCls( :, rid2det );
+                    didx2scoreTl = didx2outTl( signStop, : ) * 2 - sum( didx2outTl, 1 );
+                    didx2scoreBr = didx2outBr( signStop, : ) * 2 - sum( didx2outBr, 1 );
+                    didx2scoreCls = didx2outCls( cid, : ) * 2 - sum( didx2outCls, 1 );
+                    did2score( dids ) = ( didx2scoreTl + didx2scoreBr ) / 2 + didx2scoreCls;
                     did2fill( dids ) = true;
                     did = did + numDet;
                     % Find and store regiones to be continued.
@@ -477,7 +503,143 @@ classdef AttNetCaffe < handle
                 numRegn = size( rid2tlbr, 2 );
             end;
             did2tlbr = did2tlbr( :, did2fill );
-            did2out = did2out( :, did2fill );
+            did2score = did2score( did2fill );
+            did2cid = did2cid( did2fill );
+        end
+        function [ did2tlbr, did2score, did2cid ] = ...
+                detFromRegnsAndCls( this, rid2tlbr, nid2rid, nid2cid, im )
+            % Preparing for data.
+            testBatchSize = 256 / 2;
+            numMaxFeed = this.settingMain.numMaxTest;
+            interpolation = 'bilinear';
+            dvecSize = this.settingMain.directionVectorSize;
+            numTopCls = this.settingMain.numTopClassification;
+            inputCh = size( im, 3 );
+            numDimPerDirLyr = 4;
+            numCls = this.db.getNumClass;
+            numDimClsLyr = numCls + 1;
+            numOutDim = ( numDimPerDirLyr * 2 ) * numCls + numDimClsLyr;
+            signStop = numDimPerDirLyr;
+            dimCls = numCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
+            numRegn = size( rid2tlbr, 2 );
+            buffSize = numel( nid2rid );
+            if ~numRegn, 
+                did2tlbr = zeros( 4, 0, 'single' ); 
+                did2score = zeros( 0, 1, 'single' ); 
+                did2cid = zeros( 0, 1, 'single' ); 
+                return; 
+            end;
+            % Detection on each region.
+            did2tlbr = zeros( 4, buffSize, 'single' );
+            did2score = zeros( buffSize, 1, 'single' );
+            did2cid = zeros( buffSize, 1, 'single' );
+            did2fill = false( 1, buffSize );
+            did = 1;
+            for feed = 1 : numMaxFeed,
+                % Feedforward.
+                fprintf( '%s: %dth feed. %d regions.\n', ...
+                    upper( mfilename ), feed, numRegn );
+                rid2out = zeros( numOutDim, numRegn, 'single' );
+                trsiz = 0;
+                tfwd =0;
+                for r = 1 : testBatchSize : numRegn,
+                    trsiz_ = tic;
+                    rids = r : min( r + testBatchSize - 1, numRegn );
+                    bsize = numel( rids );
+                    brid2tlbr = rid2tlbr( :, rids );
+                    brid2im = zeros( this.inputSide, this.inputSide, inputCh, bsize, 'single' );
+                    for brid = 1 : bsize,
+                        roi = brid2tlbr( :, brid );
+                        imRegn = im( roi( 1 ) : roi( 3 ), roi( 2 ) : roi( 4 ), : );
+                        brid2im( :, :, :, brid ) = imresize...
+                            ( imRegn, [ this.inputSide, this.inputSide ], 'method', interpolation );
+                    end;
+                    trsiz = trsiz + toc( trsiz_ );
+                    % Feedforward.
+                    tfwd_ = tic;
+                    lyid2out = this.feedforwardCaffe( brid2im );
+                    lyid02out = lyid2out( this.lyid02lyid );
+                    for lyid0 = 1 : numel( lyid02out ),
+                        out = lyid02out{ lyid0 };
+                        out = permute( out, [ 3, 4, 1, 2 ] );
+                        lyid02out{ lyid0 } = out;
+                    end;
+                    brid2out = cat( 1, lyid02out{ : } );
+                    rid2out( :, rids ) = brid2out;
+                    tfwd = tfwd + toc( tfwd_ );
+                end;
+                fprintf( '%s: Preproc t = %.2f sec, Fwd t = %.2f sec.\n', upper( mfilename ), trsiz, tfwd );
+                % Do the job.
+                nrid2tlbr = cell( numCls, 1 );
+                rid2outCls = rid2out( dimCls, : );
+                [ ~, rid2rank2pCls ] = sort( rid2outCls, 1, 'descend' );
+                rid2pCls = rid2rank2pCls( 1, : );
+                for cid = 1 : numCls,
+                    rid2tar = false( size( nid2rid ) );
+                    rid2tar( nid2rid( nid2cid == cid ) ) = true;
+                    if ~sum( rid2tar ), continue; end;
+                    crid2tlbr = rid2tlbr(  :, rid2tar );
+                    crid2out = rid2out( :, rid2tar );
+                    crid2outCls = rid2outCls( :, rid2tar );
+                    
+                    crid2pCls = rid2pCls( rid2tar );
+                    crid2rank2pCls = rid2rank2pCls( :, rid2tar );
+                    crid2bgd = crid2pCls == ( numCls + 1 );
+                    crid2high = any( crid2rank2pCls( 1 : numTopCls, : ) == cid, 1 );
+                    crid2high = crid2high & ( ~crid2bgd );
+                    
+                    dimTl = ( cid - 1 ) * numDimPerDirLyr * 2 + 1;
+                    dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
+                    dimBr = dimTl + numDimPerDirLyr;
+                    crid2outTl = crid2out( dimTl, : );
+                    crid2outBr = crid2out( dimBr, : );
+                    [ ~, crid2ptl ] = max( crid2outTl, [  ], 1 );
+                    [ ~, crid2pbr ] = max( crid2outBr, [  ], 1 );
+                    crid2ss = crid2ptl == signStop & crid2pbr == signStop;
+                    crid2scoreTl = crid2outTl( signStop, : ) * 2 - sum( crid2outTl, 1 );
+                    crid2scoreBr = crid2outBr( signStop, : ) * 2 - sum( crid2outBr, 1 );
+                    crid2scoreCls = crid2outCls( cid, : ) * 2 - sum( crid2outCls, 1 );
+                    crid2score = ( crid2scoreTl + crid2scoreBr ) / 2 + crid2scoreCls;
+                    % Find and store detections.
+                    crid2det = crid2ss; % Add more conditions!!!
+                    numDet = sum( crid2det );
+                    dids = did : did + numDet - 1;
+                    did2tlbr( :, dids ) = crid2tlbr( :, crid2det );
+                    did2score( dids ) = crid2score( crid2det );
+                    did2cid( dids ) = cid;
+                    did2fill( dids ) = true;
+                    did = did + numDet;
+                    % Find and store regiones to be continued.
+                    crid2cont = ~crid2det; % Add more conditions!!!
+                    numCont = sum( crid2cont );
+                    if ~numCont, continue; end;
+                    idx2tlbr = crid2tlbr( :, crid2cont );
+                    idx2ptl = crid2ptl( crid2cont );
+                    idx2pbr = crid2pbr( crid2cont );
+                    idx2tlbrWarp = [ ...
+                        this.directions.did2vecTl( :, idx2ptl ) * dvecSize + 1; ...
+                        this.directions.did2vecBr( :, idx2pbr ) * dvecSize + this.inputSide; ];
+                    for idx = 1 : numCont,
+                        w = idx2tlbr( 4, idx ) - idx2tlbr( 2, idx ) + 1;
+                        h = idx2tlbr( 3, idx ) - idx2tlbr( 1, idx ) + 1;
+                        tlbrWarp = idx2tlbrWarp( :, idx );
+                        tlbr = resizeTlbr( tlbrWarp, [ this.inputSide, this.inputSide ], [ h, w ] );
+                        idx2tlbr( :, idx ) = tlbr - 1 + ...
+                            [ idx2tlbr( 1 : 2, idx ); idx2tlbr( 1 : 2, idx ) ];
+                    end;
+                    idx2tlbr = cat( 1, idx2tlbr, cid * ones( 1, numCont ) );
+                    nrid2tlbr{ cid } = idx2tlbr;
+                end;
+                rid2tlbr = round( cat( 2, nrid2tlbr{ : } ) );
+                if isempty( rid2tlbr ), break; end;
+                [ rid2tlbr_, ~, nid2rid ] = unique( rid2tlbr( 1 : 4, : )', 'rows' );
+                nid2cid = rid2tlbr( 5, : )';
+                rid2tlbr = rid2tlbr_';
+                numRegn = size( rid2tlbr, 2 );
+            end;
+            did2tlbr = did2tlbr( :, did2fill );
+            did2score = did2score( did2fill );
+            did2cid = did2cid( did2fill );
         end
         function res = feedforwardCaffe( this, im )
             [ h, w, c, n ] = size( im );
