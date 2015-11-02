@@ -131,7 +131,7 @@ classdef PropObjCaffe < handle
                     'Prop obj.', cummt );
             end;
         end
-        function [ rid2tlbr, nid2rid, nid2cid ] = iid2det( this, iid, cids )
+        function [ rid2tlbr, nid2rid, nid2cid ] = iid2det( this, iid, cidx2cid )
             fpath = this.getPath( iid );
             try
                 data = load( fpath );
@@ -140,25 +140,28 @@ classdef PropObjCaffe < handle
                 nid2cid = data.nid2cid;
             catch
                 % Initial guess.
+                numCls = this.db.getNumClass;
                 im = imread( this.db.iid2impath{ iid } );
-                [ rid2out, rid2tlbr ] = this.im2det( im ); % For localization, cids should be intput to this function.
+                if nargin < 3, cidx2cid = 1 : numCls; else cidx2cid = cidx2cid( : )'; end;
+                [ rid2out, rid2tlbr ] = this.im2det( im, cidx2cid );
                 % Compute each region score.
                 dvecSize = this.setting.directionVectorSize;
                 numTopCls = this.setting.numTopClassification;
                 numTopDir = this.setting.numTopDirection;
-                numCls = this.db.getNumClass;
                 signStop = 4;
                 signDiag = 2;
-                dimCls = numCls * signStop * 2 + ( 1 : ( numCls + 1 ) );
+                numTarCls = numel( cidx2cid );
+                numDimPerDirLyr = 4;
+                numDimClsLyr = numTarCls + 1;
+                dimCls = numTarCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
                 rid2outCls = rid2out( dimCls, : );
-                [ ~, rid2rank2cid ] = sort( rid2outCls, 1, 'descend' );
-                rid2tlbrProp = cell( numCls, 1 );
-                if nargin < 3, cids = 1 : numCls; else cids = cids( : )'; end;
-                for cid = cids,
+                [ ~, rid2rank2cidx ] = sort( rid2outCls, 1, 'descend' );
+                rid2tlbrProp = cell( numTarCls, 1 );
+                for cidx = 1 : numTarCls,
                     % Direction: DD condition.
-                    dimTl = ( cid - 1 ) * signStop * 2 + 1;
-                    dimTl = dimTl : dimTl + signStop - 1;
-                    dimBr = dimTl + signStop;
+                    dimTl = ( cidx - 1 ) * numDimPerDirLyr * 2 + 1;
+                    dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
+                    dimBr = dimTl + numDimPerDirLyr;
                     rid2outTl = rid2out( dimTl, : );
                     rid2outBr = rid2out( dimBr, : );
                     [ ~, rid2rank2ptl ] = sort( rid2outTl, 1, 'descend' );
@@ -172,8 +175,8 @@ classdef PropObjCaffe < handle
                     rid2dd = rid2dd & ( ~rid2ss );
                     rid2dd = rid2dd & ( rid2ptl == signDiag | rid2pbr == signDiag );
                     % Classification.
-                    rid2bgd = rid2rank2cid( 1, : ) == ( numCls + 1 );
-                    rid2okCls = any( rid2rank2cid( 1 : numTopCls, : ) == cid, 1 );
+                    rid2bgd = rid2rank2cidx( 1, : ) == ( numTarCls + 1 );
+                    rid2okCls = any( rid2rank2cidx( 1 : min( numTopCls, numDimClsLyr ), : ) == cidx, 1 );
                     rid2okCls = rid2okCls & ( ~rid2bgd );
                     % Update.
                     rid2cont = rid2dd & rid2okCls;
@@ -193,8 +196,8 @@ classdef PropObjCaffe < handle
                         idx2tlbr( :, idx ) = tlbr - 1 + ...
                             [ idx2tlbr( 1 : 2, idx ); idx2tlbr( 1 : 2, idx ) ];
                     end;
-                    idx2tlbr = cat( 1, idx2tlbr, cid * ones( 1, numCont ) );
-                    rid2tlbrProp{ cid } = idx2tlbr;
+                    idx2tlbr = cat( 1, idx2tlbr, cidx2cid( cidx ) * ones( 1, numCont ) );
+                    rid2tlbrProp{ cidx } = idx2tlbr;
                 end;
                 rid2tlbr = round( cat( 2, rid2tlbrProp{ : } ) );
                 [ rid2tlbr_, ~, nid2rid ] = unique( rid2tlbr( 1 : 4, : )', 'rows' );
@@ -205,7 +208,7 @@ classdef PropObjCaffe < handle
                 save( fpath, 'rid2tlbr', 'nid2rid', 'nid2cid' );
             end;
         end
-        function [ rid2out, rid2tlbr ] = im2det( this, im )
+        function [ rid2out, rid2tlbr ] = im2det( this, im, cidx2cid )
             dilate = this.setting.dilate;
             maxSide = this.setting.normalizeImageMaxSide;
             maximumImageSize = this.setting.maximumImageSize;
@@ -222,7 +225,7 @@ classdef PropObjCaffe < handle
                 dilate, ...
                 maximumImageSize );
             rid2tlbr = round( resizeTlbr( rid2tlbr, imSize, imSize0 ) );
-            rid2out = this.extractDenseActivationsCaffe( im, sid2size );
+            rid2out = this.extractDenseActivationsCaffe( im, cidx2cid, sid2size );
             if size( rid2out, 2 ) ~= size( rid2tlbr, 2 ),
                 error( 'Inconsistent number of regions.\n' ); end;
         end
@@ -278,6 +281,7 @@ classdef PropObjCaffe < handle
                 extractDenseActivationsCaffe( ...
                 this, ...
                 originalImage, ...
+                cidx2cid, ...
                 targetImageSizes )
             regionDilate = this.setting.dilate;
             maximumImageSize = this.setting.maximumImageSize;
@@ -307,7 +311,7 @@ classdef PropObjCaffe < handle
                 fprintf( '%s: Feed im of %dX%d size.\n', upper( mfilename ), size( im, 1 ), size( im, 2 ) );
                 trsiz = trsiz + toc( trsiz_ );
                 tfwd_ = tic;
-                y = this.feedforwardCaffe( im );
+                y = this.feedforwardCaffe( im, cidx2cid );
                 [ nr, nc, z ] = size( y );
                 y = reshape( permute( y, [ 3, 1, 2 ] ), z, nr * nc );
                 rid2out{ sid } = y;
@@ -317,7 +321,14 @@ classdef PropObjCaffe < handle
             % Aggregate for each layer.
             rid2out = cat( 2, rid2out{ : } );
         end
-        function y = feedforwardCaffe( this, im )
+        function y = feedforwardCaffe( this, im, cidx2cid )
+            cidx2cid = cidx2cid( : );
+            numCls = this.db.getNumClass;
+            targetDimDir = bsxfun( @plus, repmat( ( cidx2cid' - 1 ) * 4 * 2, 4 * 2, 1 ), ( 1 : ( 4 * 2 ) )' );
+            targetDimCls = [ cidx2cid; numCls + 1; ] + 4 * 2 * numCls;
+            targetDim = [ targetDimDir( : ); targetDimCls; ];
+            weight = this.weights( :, :, :, targetDim );
+            bias = this.biases( :, targetDim );
             [ h, w, c, n ] = size( im );
             im = im( :, :, [ 3, 2, 1 ], : );
             im = permute( im, [ 2, 1, 3, 4 ] );
@@ -328,7 +339,7 @@ classdef PropObjCaffe < handle
             x = x{ 1 };
             x = permute( x, [ 2, 1, 3, 4 ] );
             x = gpuArray( x );
-            y = vl_nnconv( x, this.weights, this.biases, 'pad', 0, 'stride', 1 );
+            y = vl_nnconv( x, weight, bias, 'pad', 0, 'stride', 1 );
             y = gather( y );
             clear x;
         end
