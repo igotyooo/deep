@@ -200,7 +200,9 @@ classdef AttNetCaffe < handle
                 iid = randsample( iid', 1 );
             end;
             im = imread( this.db.iid2impath{ iid } );
+            tic;
             [ rid2tlbr, ~, rid2cid ] = this.iid2detFromCls( iid, cids );
+            toc;
             rid2tlbr = round( rid2tlbr );
             cids = unique( rid2cid );
             numCls = numel( cids );
@@ -402,10 +404,7 @@ classdef AttNetCaffe < handle
                 fprintf( '%s: %dth feed. %d regions.\n', ...
                     upper( mfilename ), feed, numRegn );
                 rid2out = zeros( numOutDim, numRegn, 'single' );
-                trsiz = 0;
-                tfwd =0;
                 for r = 1 : testBatchSize : numRegn,
-                    trsiz_ = tic;
                     rids = r : min( r + testBatchSize - 1, numRegn );
                     bsize = numel( rids );
                     brid2tlbr = rid2tlbr( :, rids );
@@ -416,14 +415,10 @@ classdef AttNetCaffe < handle
                         brid2im( :, :, :, brid ) = imresize...
                             ( imRegn, [ this.inputSide, this.inputSide ], 'method', interpolation );
                     end;
-                    trsiz = trsiz + toc( trsiz_ );
-                    tfwd_ = tic;
                     brid2out = this.feedforwardCaffe( brid2im, cidx2cid );
                     brid2out = permute( brid2out, [ 3, 4, 1, 2 ] );
                     rid2out( :, rids ) = brid2out;
-                    tfwd = tfwd + toc( tfwd_ );
                 end;
-                fprintf( '%s: Preproc t = %.2f sec, Fwd t = %.2f sec.\n', upper( mfilename ), trsiz, tfwd );
                 % Do the job.
                 nrid2tlbr = cell( numTarCls, 1 );
                 rid2outCls = rid2out( dimCls, : );
@@ -509,14 +504,14 @@ classdef AttNetCaffe < handle
             numMaxFeed = this.settingMain.numMaxTest;
             interpolation = 'bilinear';
             dvecSize = this.settingMain.directionVectorSize;
-            numTopCls = this.settingMain.numTopClassification;
             inputCh = size( im, 3 );
+            cidx2cid = unique( nid2cid );
+            numTarCls = numel( cidx2cid );
             numDimPerDirLyr = 4;
-            numCls = this.db.getNumClass;
-            numDimClsLyr = numCls + 1;
-            numOutDim = ( numDimPerDirLyr * 2 ) * numCls + numDimClsLyr;
+            numDimClsLyr = numTarCls + 1;
+            numOutDim = ( numDimPerDirLyr * 2 ) * numTarCls + numDimClsLyr;
+            dimCls = numTarCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
             signStop = numDimPerDirLyr;
-            dimCls = numCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
             numRegn = size( rid2tlbr, 2 );
             buffSize = numel( nid2rid );
             if ~numRegn, 
@@ -536,10 +531,7 @@ classdef AttNetCaffe < handle
                 fprintf( '%s: %dth feed. %d regions.\n', ...
                     upper( mfilename ), feed, numRegn );
                 rid2out = zeros( numOutDim, numRegn, 'single' );
-                trsiz = 0;
-                tfwd =0;
                 for r = 1 : testBatchSize : numRegn,
-                    trsiz_ = tic;
                     rids = r : min( r + testBatchSize - 1, numRegn );
                     bsize = numel( rids );
                     brid2tlbr = rid2tlbr( :, rids );
@@ -550,35 +542,25 @@ classdef AttNetCaffe < handle
                         brid2im( :, :, :, brid ) = imresize...
                             ( imRegn, [ this.inputSide, this.inputSide ], 'method', interpolation );
                     end;
-                    trsiz = trsiz + toc( trsiz_ );
-                    % Feedforward.
-                    tfwd_ = tic;
-                    brid2out = this.feedforwardCaffe( brid2im );
+                    brid2out = this.feedforwardCaffe( brid2im, cidx2cid );
                     brid2out = permute( brid2out, [ 3, 4, 1, 2 ] );
                     rid2out( :, rids ) = brid2out;
-                    tfwd = tfwd + toc( tfwd_ );
                 end;
-                fprintf( '%s: Preproc t = %.2f sec, Fwd t = %.2f sec.\n', upper( mfilename ), trsiz, tfwd );
                 % Do the job.
-                nrid2tlbr = cell( numCls, 1 );
+                nrid2tlbr = cell( numTarCls, 1 );
                 rid2outCls = rid2out( dimCls, : );
-                [ ~, rid2rank2pCls ] = sort( rid2outCls, 1, 'descend' );
-                rid2pCls = rid2rank2pCls( 1, : );
-                for cid = 1 : numCls,
+                [ ~, rid2cidx ] = max( rid2outCls, [  ], 1 );
+                for cidx = 1 : numTarCls,
+                    cid = cidx2cid( cidx );
                     rid2tar = false( size( nid2rid ) );
                     rid2tar( nid2rid( nid2cid == cid ) ) = true;
                     if ~sum( rid2tar ), continue; end;
                     crid2tlbr = rid2tlbr(  :, rid2tar );
                     crid2out = rid2out( :, rid2tar );
                     crid2outCls = rid2outCls( :, rid2tar );
-                    
-                    crid2pCls = rid2pCls( rid2tar );
-                    crid2rank2pCls = rid2rank2pCls( :, rid2tar );
-                    crid2bgd = crid2pCls == ( numCls + 1 );
-                    crid2high = any( crid2rank2pCls( 1 : numTopCls, : ) == cid, 1 );
-                    crid2high = crid2high & ( ~crid2bgd );
-                    
-                    dimTl = ( cid - 1 ) * numDimPerDirLyr * 2 + 1;
+                    crid2cidx = rid2cidx( rid2tar );
+                    crid2fgd = crid2cidx ~= ( numTarCls + 1 );
+                    dimTl = ( cidx - 1 ) * numDimPerDirLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
                     dimBr = dimTl + numDimPerDirLyr;
                     crid2outTl = crid2out( dimTl, : );
@@ -586,12 +568,12 @@ classdef AttNetCaffe < handle
                     [ ~, crid2ptl ] = max( crid2outTl, [  ], 1 );
                     [ ~, crid2pbr ] = max( crid2outBr, [  ], 1 );
                     crid2ss = crid2ptl == signStop & crid2pbr == signStop;
-                    crid2scoreTl = crid2outTl( signStop, : ) * 2 - sum( crid2outTl, 1 );
-                    crid2scoreBr = crid2outBr( signStop, : ) * 2 - sum( crid2outBr, 1 );
-                    crid2scoreCls = crid2outCls( cid, : ) * 2 - sum( crid2outCls, 1 );
+                    crid2scoreTl = crid2outTl( signStop, : );
+                    crid2scoreBr = crid2outBr( signStop, : );
+                    crid2scoreCls = crid2outCls( cidx, : );
                     crid2score = ( crid2scoreTl + crid2scoreBr ) / 2 + crid2scoreCls;
                     % Find and store detections.
-                    crid2det = crid2ss; % Add more conditions!!!
+                    crid2det = crid2ss & crid2fgd; % Add more conditions!!!
                     numDet = sum( crid2det );
                     dids = did : did + numDet - 1;
                     did2tlbr( :, dids ) = crid2tlbr( :, crid2det );
@@ -600,7 +582,7 @@ classdef AttNetCaffe < handle
                     did2fill( dids ) = true;
                     did = did + numDet;
                     % Find and store regiones to be continued.
-                    crid2cont = ~crid2det; % Add more conditions!!!
+                    crid2cont = ~crid2det & ~crid2ss;
                     numCont = sum( crid2cont );
                     if ~numCont, continue; end;
                     idx2tlbr = crid2tlbr( :, crid2cont );
