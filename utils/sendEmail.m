@@ -1,5 +1,4 @@
-function sendEmail( adrssFrom, pwdFrom, adrssTo, title, mssg, attchFpaths )
-    
+function sendEmail( adrssFrom, pwdFrom, adrssTo, title, mssg, attchFpaths )    
     try
         % Gmail server supported only.
         setpref( 'Internet', 'SMTP_Server', 'smtp.gmail.com' );
@@ -17,6 +16,6 @@ function sendEmail( adrssFrom, pwdFrom, adrssTo, title, mssg, attchFpaths )
             sendmail( adrssTo, title, mssg, attchFpaths );
         end
     catch
-        
+        fprintf( 'Fail to send email.\n' );
     end;
 end
