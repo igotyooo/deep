@@ -1,7 +1,7 @@
 function runIlsvrcDetVal( numDiv, divId, gpuId )
     try
-        clc; clearvars -except gpuid numGpu; fclose all; close all;
-        addpath( genpath( '..' ) ); init;
+        clc; clearvars -except numDiv divId gpuId; fclose all; close all;
+        addpath( genpath( '..' ) ); init_ilsvrc15;
         setting.gpus                                = gpuId;
         setting.db                                  = path.db.ilsvrcdet2015;
         setting.netInfo                             = path.attNetCaffe.ilsdet;
@@ -30,7 +30,7 @@ function runIlsvrcDetVal( numDiv, divId, gpuId )
     catch ME,
         ME.stack
         [ ~, hostName ] = system( 'hostname' );
-        title = sprintf( 'PROCESSING KILLED! HOST: %s, GPU_ID: %d.', upper( hostName( 1 : end - 1 ) ), gpuid );
+        title = sprintf( 'PROCESSING KILLED! HOST: %s, GPU_ID: %d.', upper( hostName( 1 : end - 1 ) ), gpuId );
         mssg{ 1 } = [ 'Message: ', ME.message ];
         mssg{ 2 } = [ 'File: ', ME.stack.file ];
         mssg{ 3 } = [ 'Name: ', ME.stack.name ];
