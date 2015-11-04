@@ -354,6 +354,7 @@ classdef AttNetCaffe < handle
                 rid2tlbrProp{ cidx } = idx2tlbr;
             end;
             rid2tlbr = round( cat( 2, rid2tlbrProp{ : } ) );
+            if isempty( rid2tlbr ), rid2tlbr = zeros( 5, 0 ); end;
             [ rid2tlbr_, ~, nid2rid ] = unique( rid2tlbr( 1 : 4, : )', 'rows' );
             nid2cid = rid2tlbr( 5, : )';
             rid2tlbr = rid2tlbr_';
