@@ -46,6 +46,15 @@ path.net.vgg_m_2048.name                = 'VGGM2048';
 path.net.vgg_m_2048.path                = '/iron/net/imagenet-vgg-m-2048.mat';
 path.net.ddsm.name                      = 'DDSM';
 path.net.ddsm.path                      = '/iron/net/ddsm-ft-alex.mat';
+% Set pre-trained Caffe AttNet path only.
+path.attNetCaffe.ilsdet.modelPath       = '/iron/data/TRAINED_NETS_CAFFE/attNet_gnet_ilsdet_e8_x2.caffemodel';
+path.attNetCaffe.ilsdet.protoPath       = '/iron/data/TRAINED_NETS_CAFFE/attNet_gnet_ilsdet.prototxt';
+path.attNetCaffe.ilsdet.protoPathTest   = '/iron/data/TRAINED_NETS_CAFFE/attNet_gnet_ilsdet_test.prototxt';
+path.attNetCaffe.ilsdet.rgbMeanPath     = '/iron/data/TRAINED_NETS_CAFFE/attNet_gnet_ilsdet_rgbmean.mat';
+path.attNetCaffe.ilsdet.modelName       = 'ANET_GOO_ILSDET15';
+path.attNetCaffe.ilsdet.patchSide       = 223;
+path.attNetCaffe.ilsdet.inputSide       = 224;
+path.attNetCaffe.ilsdet.stride          = 32;
 % Do not touch the following codes.
 run( fullfile( path.lib.vlfeat, 'toolbox/vl_setup.m' ) );       % VLFeat.
 run( fullfile( path.lib.matConvNet, 'matlab/vl_setupnn.m' ) );  % MatConvnet.
@@ -55,3 +64,14 @@ addpath( fullfile( path.lib.jsgd, '/matlab' ) );                % JSGD main.
 addpath( fullfile( path.lib.ilsvrcDevKit, 'evaluation' ) );     % ILSVRC dev kit.
 addpath( genpath( path.lib.selectiveSearch ) );                 % Selective search.
 addpath( fullfile( path.lib.caffePaeng, 'matlab' ) );           % Caffe-Paeng.
+
+
+
+
+
+
+
+
+
+
+
