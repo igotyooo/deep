@@ -4,52 +4,68 @@ classdef AttNetCaffe < handle
         attNet;
         attNetName;
         rgbMean;
+        patchSide;
         inputSide;
+        stride;
         weights;
         biases;
-        propObj;
+        scales;
         directions;
-        settingMain;
-        settingPost;
+        settingProp;
+        settingDet0;
+        settingMrg0;
+        settingDet1;
+        settingMrg1;
     end
     methods( Access = public )
-        function this = AttNetCaffe( ...
-                db, ...
-                propObj, ...
-                settingMain, ...
-                settingPost )
-            this.db = db;
-            this.propObj = propObj;
-            this.settingMain.rescaleBox = 1;
-            this.settingMain.directionVectorSize = 30;
-            this.settingMain.numTopClassification = 1;
-            this.settingMain.numTopDirection = 1;
-            this.settingMain.numMaxTest = 50;
-            this.settingPost.mergingOverlap = 0.7;
-            this.settingPost.mergingType = 'OV'; 'NMS';
-            this.settingPost.mergingMethod = 'WAVG'; 'MAX';
-            this.settingPost.minimumNumSupportBox = 0;
-            this.settingMain = setChanges( ...
-                this.settingMain, ...
-                settingMain, ...
-                upper( mfilename ) );
-            this.settingPost = setChanges( ...
-                this.settingPost, ...
-                settingPost, ...
-                upper( mfilename ) );
+        function this = AttNetCaffe...
+                ( db, settingProp, settingDet0, settingMrg0, settingDet1, settingMrg1 )
+            this.db                                   = db;
+            this.settingProp.numBaseProposal          = 0;
+            this.settingProp.normalizeImageMaxSide    = 500;
+            this.settingProp.numScaling               = 12;
+            this.settingProp.dilate                   = 1 / 2;
+            this.settingProp.posIntOverRegnMoreThan   = 1 / 8;
+            this.settingProp.maximumImageSize         = 9e6;
+            this.settingProp.numTopClassification     = 1;
+            this.settingProp.numTopDirection          = 1;
+            this.settingProp.directionVectorSize      = 30;
+            this.settingDet0.type                     = 'DYNAMIC';
+            this.settingDet0.rescaleBox               = 1;
+            this.settingDet0.numTopClassification     = 1;          % Ignored if 'STATIC'.
+            this.settingDet0.numTopDirection          = 1;          % Ignored if 'STATIC'.
+            this.settingDet0.directionVectorSize      = 30;
+            this.settingMrg0.mergingOverlap           = 0.8;
+            this.settingMrg0.mergingType              = 'OV';
+            this.settingMrg0.mergingMethod            = 'WAVG';
+            this.settingMrg0.minimumNumSupportBox     = 1;          % Ignored if mergingOverlap = 1.
+            this.settingDet1.type                     = 'DYNAMIC';
+            this.settingDet1.rescaleBox               = 2.5;
+            this.settingDet1.numTopClassification     = 1;          % Ignored if 'STATIC'.
+            this.settingDet1.numTopDirection          = 1;          % Ignored if 'STATIC'.
+            this.settingDet1.directionVectorSize      = 30;
+            this.settingMrg1.mergingOverlap           = 0.6;
+            this.settingMrg1.mergingType              = 'OV';
+            this.settingMrg1.mergingMethod            = 'WAVG';
+            this.settingMrg1.minimumNumSupportBox     = 0;          % Ignored if mergingOverlap = 1.
+            this.settingProp = setChanges...
+                ( this.settingProp, settingProp, upper( mfilename ) );
+            this.settingDet0 = setChanges...
+                ( this.settingDet0, settingDet0, upper( mfilename ) );
+            this.settingMrg0 = setChanges...
+                ( this.settingMrg0, settingMrg0, upper( mfilename ) );
+            this.settingDet1 = setChanges...
+                ( this.settingDet1, settingDet1, upper( mfilename ) );
+            this.settingMrg1 = setChanges...
+                ( this.settingMrg1, settingMrg1, upper( mfilename ) );
         end
         function init( this, netInfo, gpus )
-            % Define directions.
-            fprintf( '%s: Define directions.\n', upper( mfilename ) );
-            numDirection = 3;
-            angstep = ( pi / 2 ) / ( numDirection - 1 );
-            did2angTl = ( 0 : angstep : ( pi / 2 ) )';
-            did2angBr = ( pi : angstep : ( pi * 3 / 2 ) )';
-            this.directions.did2vecTl = [ [ cos( did2angTl' ); sin( did2angTl' ); ], [ 0; 0; ] ];
-            this.directions.did2vecBr = [ [ cos( did2angBr' ); sin( did2angBr' ); ], [ 0; 0; ] ];
-            % Fetch output layer's parameters on GPU.
+            % 1. Fetch Caffe parameters of output layer on GPU.
+            fprintf( '%s: Fetch Caffe parameters of output layer on GPU.\n', upper( mfilename ) );
             this.attNetName = netInfo.modelName;
-            this.inputSide = netInfo.patchSide;
+            this.patchSide = netInfo.patchSide;
+            this.inputSide = netInfo.inputSide;
+            this.stride = netInfo.stride;
             this.rgbMean = load( netInfo.rgbMeanPath, 'rgbMean' );
             this.rgbMean = this.rgbMean.rgbMean;
             caffe.set_mode_gpu(  );
@@ -80,302 +96,402 @@ classdef AttNetCaffe < handle
             end;
             this.weights = gpuArray( cat( 4, mlid2w{ : } ) );
             this.biases = gpuArray( cat( 2, mlid2b{ : } ) );
-            % Fetch att net on GPU without the output layer.
+            fprintf( '%s: Done.\n', upper( mfilename ) );
+            % 2. Fetch Caffe net on GPU without the output layer.
+            fprintf( '%s: Fetch Caffe net on GPU without the output layer..\n', upper( mfilename ) );
             caffe.reset_all(  );
             caffe.set_mode_gpu(  );
             caffe.set_device( gpus - 1 );
             this.attNet = caffe.Net( netInfo.protoPathTest, netInfo.modelPath, 'test' );
+            fprintf( '%s: Done.\n', upper( mfilename ) );
+            % 3. Determine scaling factors.
+            maxSide = this.settingProp.normalizeImageMaxSide;
+            numScaling = this.settingProp.numScaling;
+            posIntOverRegnMoreThan = this.settingProp.posIntOverRegnMoreThan;
+            fpath = this.getScalesPath;
+            try
+                fprintf( '%s: Try to load scaling factors.\n', upper( mfilename ) );
+                data = load( fpath );
+                this.scales = data.data.scales;
+            catch
+                fprintf( '%s: Determine scaling factors.\n', ...
+                    upper( mfilename ) );
+                setid = 2;
+                oid2tlbr = this.db.oid2bbox( :, this.db.iid2setid( this.db.oid2iid ) == setid );
+                if maxSide,
+                    oid2iid = this.db.oid2iid( this.db.iid2setid( this.db.oid2iid ) == setid );
+                    oid2imsize = this.db.iid2size( :, oid2iid );
+                    numRegn = size( oid2tlbr, 2 );
+                    for oid = 1 : numRegn,
+                        [ ~, oid2tlbr( :, oid ) ] = normalizeImageSize...
+                            ( maxSide, oid2imsize( :, oid ), oid2tlbr( :, oid ) );
+                    end;
+                end;
+                referenceSide = this.patchSide * sqrt( posIntOverRegnMoreThan );
+                [ scalesRow, scalesCol ] = determineImageScaling...
+                    ( oid2tlbr, numScaling, referenceSide, true );
+                data.scales = [ scalesRow, scalesCol ]';
+                fprintf( '%s: Done.\n', upper( mfilename ) );
+                save( fpath, 'data' );
+                this.scales = data.scales;
+            end;
+            fprintf( '%s: Done.\n', upper( mfilename ) );
+            % 4. Define directions.
+            fprintf( '%s: Define directions.\n', upper( mfilename ) );
+            numDirection = 3;
+            angstep = ( pi / 2 ) / ( numDirection - 1 );
+            did2angTl = ( 0 : angstep : ( pi / 2 ) )';
+            did2angBr = ( pi : angstep : ( pi * 3 / 2 ) )';
+            this.directions.did2vecTl = [ [ cos( did2angTl' ); sin( did2angTl' ); ], [ 0; 0; ] ];
+            this.directions.did2vecBr = [ [ cos( did2angBr' ); sin( did2angBr' ); ], [ 0; 0; ] ];
+            fprintf( '%s: Done.\n', upper( mfilename ) );
         end
-        function [ rid2tlbr, rid2score, rid2cid ] = iid2det( this, iid )
-            % Get initial proposals.
-            [ rid2tlbr0, nid2rid0, nid2cid0 ] = this.propObj.iid2det( iid );
-            % Pre-processing: box re-scaling.
-            rescaleBox = this.settingMain.rescaleBox;
-            rid2tlbr0 = scaleBoxes( rid2tlbr0, sqrt( rescaleBox ), sqrt( rescaleBox ) );
-            rid2tlbr0 = round( rid2tlbr0 );
-            % Do detection on each region.
-            interpolation = 'bilinear';
-            im = imread( this.db.iid2impath{ iid } );
-            imTl = min( rid2tlbr0( 1 : 2, : ), [  ], 2 );
-            imBr = max( rid2tlbr0( 3 : 4, : ), [  ], 2 );
-            rid2tlbr0( 1 : 4, : ) = bsxfun( @minus, rid2tlbr0( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
-            imGlobal = normalizeAndCropImage...
-                ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
-            [ rid2tlbr, rid2score, rid2cid ] = this.detFromRegns( rid2tlbr0, nid2rid0, nid2cid0, imGlobal );
-            % Convert to original image domain.
-            rid2tlbr = bsxfun( @minus, rid2tlbr, 1 - [ imTl; imTl; ] );
+        function [ rid2tlbr, nid2rid, nid2cid ] = iid2prop( this, iid, cidx2cid )
+            fpath = this.getPropPath( iid );
+            try
+                data = load( fpath );
+                rid2tlbr = data.rid2tlbr;
+                nid2rid = data.nid2rid;
+                nid2cid = data.nid2cid;
+            catch
+                [ rid2tlbr, nid2rid, nid2cid ] = this.iid2propWrapper( iid, cidx2cid );
+                this.makePropDir;
+                save( fpath, 'rid2tlbr', 'nid2rid', 'nid2cid' );
+            end;
+        end
+        function [ rid2tlbr, rid2score, rid2cid ] = iid2det0( this, iid, cidx2cid )
+            fpath = this.getDet0Path( iid );
+            try
+                data = load( fpath );
+                rid2tlbr = data.rid2tlbr;
+                rid2score = data.rid2score;
+                rid2cid = data.rid2cid;
+            catch
+                % 1. Get regions.
+                [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid, cidx2cid );
+                % 2. Tighten regions.
+                [ rid2tlbr, rid2score, rid2cid ] = this.iid2det...
+                    ( iid, rid2tlbr, nid2rid, nid2cid, this.settingDet0 );
+                this.makeDet0Dir;
+                save( fpath, 'rid2tlbr', 'rid2score', 'rid2cid' );
+            end;
             if nargout,
-                % Post-processing: merge bounding boxes.
-                if this.settingPost.mergingOverlap ~= 1,
-                    [ rid2tlbr, rid2score, rid2cid ] = ...
-                        this.merge( rid2tlbr, rid2score, rid2cid );
-                end;
+                % 3. Merge regions.
+                [ rid2tlbr, rid2score, rid2cid ] = this.merge...
+                    ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
             end;
         end
-        function [ rid2tlbr, rid2score, rid2cid ] = iid2detFromCls( this, iid, cids )
-            % Get initial proposals.
-            [ rid2tlbr0, nid2rid0, nid2cid0 ] = this.propObj.iid2det( iid, cids );
-            % Pre-processing: box re-scaling.
-            rescaleBox = this.settingMain.rescaleBox;
-            rid2tlbr0 = scaleBoxes( rid2tlbr0, sqrt( rescaleBox ), sqrt( rescaleBox ) );
-            rid2tlbr0 = round( rid2tlbr0 );
-            % Do detection on each region.
-            interpolation = 'bilinear';
-            im = imread( this.db.iid2impath{ iid } );
-            imTl = min( rid2tlbr0( 1 : 2, : ), [  ], 2 );
-            imBr = max( rid2tlbr0( 3 : 4, : ), [  ], 2 );
-            rid2tlbr0( 1 : 4, : ) = bsxfun( @minus, rid2tlbr0( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
-            imGlobal = normalizeAndCropImage...
-                ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
-            [ rid2tlbr, rid2score, rid2cid ] = this.detFromRegnsAndCls( rid2tlbr0, nid2rid0, nid2cid0, imGlobal );
-            % Convert to original image domain.
-            rid2tlbr = bsxfun( @minus, rid2tlbr, 1 - [ imTl; imTl; ] );
+        function [ rid2tlbr, rid2score, rid2cid ] = iid2det1( this, iid, cidx2cid )
+            fpath = this.getDet1Path( iid );
+            try
+                data = load( fpath );
+                rid2tlbr = data.rid2tlbr;
+                rid2score = data.rid2score;
+                rid2cid = data.rid2cid;
+            catch
+                % 1. Get regions.
+                [ rid2tlbr, ~, rid2cid ] = this.iid2det0( iid, cidx2cid );
+                nid2rid = 1 : numel( rid2cid );
+                nid2cid = rid2cid;
+                % 2. Tighten regions.
+                [ rid2tlbr, rid2score, rid2cid ] = this.iid2det...
+                    ( iid, rid2tlbr, nid2rid, nid2cid, this.settingDet1 );
+                this.makeDet1Dir;
+                save( fpath, 'rid2tlbr', 'rid2score', 'rid2cid' );
+            end;
             if nargout,
-                % Post-processing: merge bounding boxes.
-                if this.settingPost.mergingOverlap ~= 1,
-                    [ rid2tlbr, rid2score, rid2cid ] = ...
-                        this.merge( rid2tlbr, rid2score, rid2cid );
-                end;
+                % 3. Merge regions.
+                [ rid2tlbr, rid2score, rid2cid ] = this.merge...
+                    ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
             end;
         end
-        function demo( this, fid, wait, iid )
-            if nargin < 4,
-                iid = this.db.getTeiids;
-                iid = randsample( iid', 1 );
-            end;
+        function demoDet( this, iid, cidx2cid )
             im = imread( this.db.iid2impath{ iid } );
-            [ rid2tlbr, rid2score, rid2cid ] = this.iid2det( iid );
-            figure( fid );
-            set( gcf, 'color', 'w' );
-            if wait,
-                for rid = 1 : numel( rid2score ),
-                    name = sprintf( '%s, %.2f', ...
-                        this.db.cid2name{ rid2cid( rid ) }, rid2score( rid ) );
-                    plottlbr( round( rid2tlbr( :, rid ) ), im, false, 'r', { name } ); 
-                    title( sprintf( 'Detection. (IID%06d)', iid ) );
-                    waitforbuttonpress;
-                end;
-            else
-                % plottlbr( round( rid2tlbr ), im, false, { 'r'; 'g'; 'b'; 'y' } );
-                % title( sprintf( 'Detection. (IID%06d)', iid ) );
-                name = arrayfun( @( cid, score )sprintf( '%s, %.1f', this.db.cid2name{ cid }, score ), rid2cid, rid2score, 'UniformOutput', false );
-                plottlbr( round( rid2tlbr ), im, false, 'r', name );
-                title( sprintf( 'Detection. (IID%06d)', iid ) );
-            end;
-        end
-        function demo2( this, fid, position, iid )
-            if nargin < 4,
-                iid = this.db.getTeiids;
-                iid = randsample( iid', 1 );
-            end;
-            im = imread( this.db.iid2impath{ iid } );
-            tic;
-            [ rid2tlbr, ~, rid2cid ] = this.iid2det( iid );
-            toc;
+            % Demo 1: proposals.
+            [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid, cidx2cid );
             rid2tlbr = round( rid2tlbr );
-            cids = unique( rid2cid );
-            numCls = numel( cids );
-            figure( fid );
-            set( gcf, 'color', 'w' );
-            for c = 1 : numCls,
-                cid = cids( c );
-                rid2ok = rid2cid == cid;
-                plottlbr( rid2tlbr( :, rid2ok ), im, false, { 'r'; 'g'; 'b'; 'y' } );
-                title( sprintf( '%s, IID%06d', this.db.cid2name{ cid }, iid ) );
-                hold off;
-                setFigPos( gcf, position ); drawnow;
-                waitforbuttonpress;
-                newrid2tlbr = ov( rid2tlbr( :, rid2ok ), ones( sum( rid2ok ), 1 )', 0.6, 1, 'WAVG' );
-                if isempty( newrid2tlbr ), continue; end;
-                plottlbr( round( newrid2tlbr ), im, false, 'c' );
-                title( sprintf( '%s, IID%06d', this.db.cid2name{ cid }, iid ) );
-                hold off;
-                setFigPos( gcf, position ); drawnow;
-                waitforbuttonpress;
+            figure; set( gcf, 'color', 'w' );
+            plottlbr( rid2tlbr, im, false, { 'r'; 'g'; 'b'; 'y' } );
+            title( sprintf( 'Proposals, IID%06d', iid ) ); hold off;
+            setFigPos( gcf, [ 3, 6, 1, 2 ] ); drawnow;
+            % Demo 2: detection0.
+            fpath = this.getDet0Path( iid );
+            try
+                data = load( fpath );
+                rid2tlbr = data.rid2tlbr;
+                rid2score = data.rid2score;
+                rid2cid = data.rid2cid;
+            catch
+                [ rid2tlbr, rid2score, rid2cid ] = this.iid2det...
+                    ( iid, rid2tlbr, nid2rid, nid2cid, this.settingDet0 );
+                this.makeDet0Dir;
+                save( fpath, 'rid2tlbr', 'rid2score', 'rid2cid' );
             end;
-        end
-        function demo3( this, fid, position, iid, cids )
-            if nargin < 4,
-                iid = this.db.getTeiids;
-                iid = randsample( iid', 1 );
-            end;
-            im = imread( this.db.iid2impath{ iid } );
-            tic;
-            [ rid2tlbr, ~, rid2cid ] = this.iid2detFromCls( iid, cids );
-            toc;
             rid2tlbr = round( rid2tlbr );
-            cids = unique( rid2cid );
-            numCls = numel( cids );
-            figure( fid );
-            set( gcf, 'color', 'w' );
-            for c = 1 : numCls,
-                cid = cids( c );
-                rid2ok = rid2cid == cid;
-                plottlbr( rid2tlbr( :, rid2ok ), im, false, { 'r'; 'g'; 'b'; 'y' } );
-                title( sprintf( '%s, IID%06d', this.db.cid2name{ cid }, iid ) );
-                hold off;
-                setFigPos( gcf, position ); drawnow;
-                waitforbuttonpress;
-                newrid2tlbr = ov( rid2tlbr( :, rid2ok ), ones( sum( rid2ok ), 1 )', 0.6, 1, 'WAVG' );
-                if isempty( newrid2tlbr ), continue; end;
-                plottlbr( round( newrid2tlbr ), im, false, 'c' );
-                title( sprintf( '%s, IID%06d', this.db.cid2name{ cid }, iid ) );
-                hold off;
-                setFigPos( gcf, position ); drawnow;
-                waitforbuttonpress;
+            figure; set( gcf, 'color', 'w' );
+            plottlbr( rid2tlbr, im, false, { 'r'; 'g'; 'b'; 'y' } );
+            title( sprintf( 'Detection0, IID%06d', iid ) ); hold off;
+            setFigPos( gcf, [ 3, 6, 1, 3 ] ); drawnow;
+            % Demo 3: Merge0.
+            [ rid2tlbr, ~, rid2cid ] = this.merge...
+                ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
+            rid2tlbr = round( rid2tlbr );
+            figure; set( gcf, 'color', 'w' );
+            plottlbr( rid2tlbr, im, false, 'c', this.db.cid2name( rid2cid ) );
+            title( sprintf( 'Merge0, IID%06d', iid ) ); hold off;
+            setFigPos( gcf, [ 3, 6, 1, 4 ] ); drawnow;
+            % Demo 4: detection1.
+            fpath = this.getDet1Path( iid );
+            try
+                data = load( fpath );
+                rid2tlbr = data.rid2tlbr;
+                rid2score = data.rid2score;
+                rid2cid = data.rid2cid;
+            catch
+                nid2rid = 1 : numel( rid2cid );
+                nid2cid = rid2cid;
+                [ rid2tlbr, rid2score, rid2cid ] = this.iid2det...
+                    ( iid, rid2tlbr, nid2rid, nid2cid, this.settingDet1 );
+                this.makeDet1Dir;
+                save( fpath, 'rid2tlbr', 'rid2score', 'rid2cid' );
             end;
+            rid2tlbr = round( rid2tlbr );
+            figure; set( gcf, 'color', 'w' );
+            plottlbr( rid2tlbr, im, false, { 'r'; 'g'; 'b'; 'y' } );
+            title( sprintf( 'Detection1, IID%06d', iid ) ); hold off;
+            setFigPos( gcf, [ 3, 6, 1, 5 ] ); drawnow;
+            % Demo 5: Merge1.
+            [ rid2tlbr, ~, rid2cid ] = this.merge...
+                ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
+            rid2tlbr = round( rid2tlbr );
+            figure; set( gcf, 'color', 'w' );
+            plottlbr( rid2tlbr, im, false, 'c', this.db.cid2name( rid2cid ) );
+            title( sprintf( 'Merge1, IID%06d', iid ) ); hold off;
+            setFigPos( gcf, [ 3, 6, 1, 6 ] ); drawnow;
         end
-        function detSubDb( this, numDiv, divId )
+        function subDbDet0( this, cidx2cid, numDiv, divId )
             iids = this.db.getTeiids;
             numIm = numel( iids );
             divSize = ceil( numIm / numDiv );
             sidx = divSize * ( divId - 1 ) + 1;
             eidx = min( sidx + divSize - 1, numIm );
             iids = iids( sidx : eidx );
-            this.makeDir;
+            fprintf( '%s: Check if detections exist.\n', upper( mfilename ) );
+            paths = arrayfun( @( iid )this.getDet0Path( iid ), iids, 'UniformOutput', false );
+            exists = cellfun( @( path )exist( path, 'file' ), paths );
+            this.makeDet0Dir;
+            iids = iids( ~exists );
             numIm = numel( iids );
             cummt = 0;
             for iidx = 1 : numIm; itime = tic;
                 iid = iids( iidx );
-                this.iid2det0( iid );
+                this.iid2det0( iid, cidx2cid );
                 cummt = cummt + toc( itime );
                 fprintf( '%s: ', upper( mfilename ) );
-                disploop( numIm, iidx, ...
-                    'Init det.', cummt );
+                disploop( numIm, iidx, sprintf( 'Det0 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
             end;
-        end
-        function detDb( this )
-            fpath = this.getDetResPath( 0 );
-            try
-                fprintf( '%s: Try to load det res.\n', upper( mfilename ) ); 
-                data = load( fpath );
-                res = data.res;
-                fprintf( '%s: Done.\n', upper( mfilename ) );
-            catch
-                iids = this.db.getTeiids;
-                fprintf( '%s: Check if detections exist.\n', ...
-                    upper( mfilename ) );
-                paths = arrayfun( ...
-                    @( iid )this.getPath( iid ), iids, ...
-                    'UniformOutput', false );
-                exists = cellfun( ...
-                    @( path )exist( path, 'file' ), paths );
-                this.makeDir;
-                iids = iids( ~exists );
-                numIm = numel( iids );
-                cummt = 0;
-                for iidx = 1 : numIm; itime = tic;
-                    iid = iids( iidx );
-                    this.iid2det0( iid );
-                    cummt = cummt + toc( itime );
-                    fprintf( '%s: ', upper( mfilename ) );
-                    disploop( numIm, iidx, ...
-                        'Init det.', cummt );
-                end
-                iids = this.db.getTeiids;
-                numIm = numel( iids );
-                res.did2iid = cell( numIm, 1 );
-                res.did2tlbr = cell( numIm, 1 );
-                res.did2score = cell( numIm, 1 );
-                cummt = 0;
-                for iidx = 1 : numIm; itime = tic;
-                    iid = iids( iidx );
-                    [ res.did2tlbr{ iidx }, res.did2score{ iidx } ] = ...
-                        this.iid2det( iid );
-                    if isempty( res.did2tlbr{ iidx } ), continue; end;
-                    res.did2iid{ iidx } = iid * ...
-                        ones( size( res.did2tlbr{ iidx }, 2 ), 1 );
-                    cummt = cummt + toc( itime );
-                    fprintf( '%s: ', upper( mfilename ) );
-                    disploop( numIm, iidx, ...
-                        'Det.', cummt );
-                end
-                res.did2iid = cat( 1, res.did2iid{ : } );
-                res.did2tlbr = cat( 2, res.did2tlbr{ : } );
-                res.did2score = cat( 1, res.did2score{ : } );
-                fprintf( '%s: Save det results.\n', upper( mfilename ) );
-                save( fpath, 'res' );
-                fprintf( '%s: Done.\n', upper( mfilename ) );
-            end
-            this.did2iid = res.did2iid;
-            this.did2tlbr = res.did2tlbr;
-            this.did2score = res.did2score;
-            this.refineId = 0;
-        end
-        function dir = getDir( this )
-            name = this.getName;
-            if length( name ) > 150, 
-                name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) ); 
-                name = sprintf( '%010d', name );
-                name = strcat( 'DET_', name );
-            end
-            dir = fullfile...
-                ( this.db.dstDir, name );
-        end
-        function dir = makeDir( this )
-            dir = this.getDir;
-            if ~exist( dir, 'dir' ), mkdir( dir ); end;
-        end
-        function fpath = getPath( this, iid )
-            fname = sprintf...
-                ( 'ID%06d.mat', iid );
-            fpath = fullfile...
-                ( this.getDir, fname );
-        end
-        function fpath = getDetResPath( this, refineId )
-            name = sprintf( 'DETRES%d_%s', ...
-                refineId, this.settingInitMrg.changes );
-            if refineId > 0, name  = strcat( name, '_', this.settingRefine.changes ); end;
-            name( strfind( name, '__' ) ) = '';
-            if name( end ) == '_', name( end ) = ''; end;
-            fname = sprintf( '%s.mat', name );
-            fpath = fullfile...
-                ( this.getDir, fname );
         end
     end
     methods( Access = private )
-        function [ rid2tlbr, rid2score, rid2cid ] = ...
-                merge( this, rid2tlbr, rid2score, rid2cid )
-            mergingOverlap = this.settingPost.mergingOverlap;
-            mergingType = this.settingPost.mergingType;
-            mergingMethod = this.settingPost.mergingMethod;
-            minNumSuppBox = this.settingPost.minimumNumSupportBox;
-            cids = unique( rid2cid );
-            numCls = numel( cids );
-            rid2tlbr_ = cell( numCls, 1 );
-            rid2score_ = cell( numCls, 1 );
-            rid2cid_ = cell( numCls, 1 );
-            for cidx = 1 : numCls,
-                cid = cids( cidx );
-                rid2ok = rid2cid == cid;
-                switch mergingType,
-                    case 'NMS',
-                        [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = nms( ...
-                            [ rid2tlbr( :, rid2ok ); rid2score( rid2ok ); ]', ...
-                            mergingOverlap, minNumSuppBox, mergingMethod );
-                        rid2tlbr_{ cidx } = rid2tlbr_{ cidx }';
-                    case 'OV',
-                        [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = ov( ...
-                            rid2tlbr( :, rid2ok ), rid2score( rid2ok ), ...
-                            mergingOverlap, minNumSuppBox, mergingMethod );
-                end
-                rid2cid_{ cidx } = cid * ones( size( rid2score_{ cidx } ) );
+        function [ rid2tlbr, nid2rid, nid2cid ] = iid2propWrapper( this, iid, cidx2cid )
+            % Initial guess.
+            cidx2cid = cidx2cid( : )';
+            im = imread( this.db.iid2impath{ iid } );
+            [ rid2out, rid2tlbr ] = this.initGuess( im, cidx2cid );
+            % Compute each region score.
+            dvecSize = this.settingProp.directionVectorSize;
+            numTopCls = this.settingProp.numTopClassification;
+            numTopDir = this.settingProp.numTopDirection;
+            signStop = 4;
+            signDiag = 2;
+            numTarCls = numel( cidx2cid );
+            numDimPerDirLyr = 4;
+            numDimClsLyr = numTarCls + 1;
+            dimCls = numTarCls * numDimPerDirLyr * 2 + ( 1 : numDimClsLyr );
+            rid2outCls = rid2out( dimCls, : );
+            [ ~, rid2rank2cidx ] = sort( rid2outCls, 1, 'descend' );
+            rid2tlbrProp = cell( numTarCls, 1 );
+            for cidx = 1 : numTarCls,
+                % Direction: DD condition.
+                dimTl = ( cidx - 1 ) * numDimPerDirLyr * 2 + 1;
+                dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
+                dimBr = dimTl + numDimPerDirLyr;
+                rid2outTl = rid2out( dimTl, : );
+                rid2outBr = rid2out( dimBr, : );
+                [ ~, rid2rank2ptl ] = sort( rid2outTl, 1, 'descend' );
+                [ ~, rid2rank2pbr ] = sort( rid2outBr, 1, 'descend' );
+                rid2ptl = rid2rank2ptl( 1, : );
+                rid2pbr = rid2rank2pbr( 1, : );
+                rid2okTl = any( rid2rank2ptl( 1 : numTopDir, : ) == signDiag, 1 );
+                rid2okBr = any( rid2rank2pbr( 1 : numTopDir, : ) == signDiag, 1 );
+                rid2ss = rid2ptl == signStop & rid2pbr == signStop;
+                rid2dd = rid2okTl & rid2okBr;
+                rid2dd = rid2dd & ( ~rid2ss );
+                rid2dd = rid2dd & ( rid2ptl == signDiag | rid2pbr == signDiag );
+                % Classification.
+                rid2bgd = rid2rank2cidx( 1, : ) == ( numTarCls + 1 );
+                rid2okCls = any( rid2rank2cidx( 1 : min( numTopCls, numDimClsLyr ), : ) == cidx, 1 );
+                rid2okCls = rid2okCls & ( ~rid2bgd );
+                % Update.
+                rid2cont = rid2dd & rid2okCls;
+                numCont = sum( rid2cont );
+                if ~numCont, continue; end;
+                idx2tlbr = rid2tlbr( 1 : 4, rid2cont );
+                idx2ptl = rid2ptl( rid2cont );
+                idx2pbr = rid2pbr( rid2cont );
+                idx2tlbrWarp = [ ...
+                    this.directions.did2vecTl( :, idx2ptl ) * dvecSize + 1; ...
+                    this.directions.did2vecBr( :, idx2pbr ) * dvecSize + this.patchSide; ];
+                for idx = 1 : numCont,
+                    w = idx2tlbr( 4, idx ) - idx2tlbr( 2, idx ) + 1;
+                    h = idx2tlbr( 3, idx ) - idx2tlbr( 1, idx ) + 1;
+                    tlbrWarp = idx2tlbrWarp( :, idx );
+                    tlbr = resizeTlbr( tlbrWarp, [ this.patchSide, this.patchSide ], [ h, w ] );
+                    idx2tlbr( :, idx ) = tlbr - 1 + ...
+                        [ idx2tlbr( 1 : 2, idx ); idx2tlbr( 1 : 2, idx ) ];
+                end;
+                idx2tlbr = cat( 1, idx2tlbr, cidx2cid( cidx ) * ones( 1, numCont ) );
+                rid2tlbrProp{ cidx } = idx2tlbr;
             end;
-            rid2tlbr = cat( 2, rid2tlbr_{ : } );
-            rid2score = cat( 1, rid2score_{ : } );
-            rid2cid = cat( 1, rid2cid_{ : } );
-            [ rid2score, idx ] = sort( rid2score, 'descend' );
-            rid2tlbr = rid2tlbr( :, idx );
-            rid2cid = rid2cid( idx );
+            rid2tlbr = round( cat( 2, rid2tlbrProp{ : } ) );
+            [ rid2tlbr_, ~, nid2rid ] = unique( rid2tlbr( 1 : 4, : )', 'rows' );
+            nid2cid = rid2tlbr( 5, : )';
+            rid2tlbr = rid2tlbr_';
+            % Add base proposals.
+            numAdd = this.settingProp.numBaseProposal;
+            if numAdd,
+                numProp = size( rid2tlbr, 2 );
+                [ r, c, ~ ] = size( im );
+                scaling = sqrt( 2 .^ ( -1 : ( -1 + numAdd - 1 ) ) );
+                newProp = round( scaleBoxes( repmat( [ 1; 1; r; c; ], 1, numAdd ), scaling, scaling ) );
+                rid2tlbr = cat( 2, rid2tlbr, newProp );
+                nid2cid = cat( 1, nid2cid, repmat( cidx2cid', numAdd, 1 ) );
+                newRids = repmat( numProp + ( 1 : numAdd ), numTarCls, 1 );
+                nid2rid = cat( 1, nid2rid, newRids( : ) );
+            end;
+            if isempty( rid2tlbr ),
+                rid2tlbr = zeros( 4, 0 );
+                nid2rid = zeros( 0, 1 );
+                nid2cid = zeros( 0, 1 );
+            end;
         end
-        function [ did2tlbr, did2score, did2cid ] = detFromRegns( this, rid2tlbr, nid2rid, nid2cid, im )
-            % Preparing for data.
-            testBatchSize = 256 / 2;
-            numMaxFeed = this.settingMain.numMaxTest;
+        function [ rid2tlbr, rid2score, rid2cid ] = iid2det...
+                ( this, iid, rid2tlbr0, nid2rid0, nid2cid0, detParams )
+            if isempty( rid2tlbr0 ),
+                rid2tlbr = zeros( 4, 0 );
+                rid2score = zeros( 0, 1 );
+                rid2cid = zeros( 0, 1 );
+                return;
+            end;
+            % Pre-processing: box re-scaling.
+            detType = detParams.type;
+            rescaleBox = detParams.rescaleBox;
+            rid2tlbr0 = scaleBoxes( rid2tlbr0, sqrt( rescaleBox ), sqrt( rescaleBox ) );
+            rid2tlbr0 = round( rid2tlbr0 );
+            % Do detection on each region.
             interpolation = 'bilinear';
-            dvecSize = this.settingMain.directionVectorSize;
-            numTopCls = this.settingMain.numTopClassification;
-            numTopDir = this.settingMain.numTopDirection;
+            imTl = min( rid2tlbr0( 1 : 2, : ), [  ], 2 );
+            imBr = max( rid2tlbr0( 3 : 4, : ), [  ], 2 );
+            rid2tlbr0( 1 : 4, : ) = bsxfun( @minus, rid2tlbr0( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
+            im = imread( this.db.iid2impath{ iid } );
+            imGlobal = normalizeAndCropImage...
+                ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
+            switch detType,
+                case 'STATIC',
+                    [ rid2tlbr, rid2score, rid2cid ] = this.staticFitting...
+                        ( rid2tlbr0, nid2rid0, nid2cid0, imGlobal, detParams );
+                case 'DYNAMIC',
+                    [ rid2tlbr, rid2score, rid2cid ] = this.dynamicFitting...
+                        ( rid2tlbr0, nid2rid0, nid2cid0, imGlobal, detParams );
+            end;
+            if isempty( rid2tlbr ),
+                rid2tlbr = zeros( 4, 0 );
+                rid2score = zeros( 0, 1 );
+                rid2cid = zeros( 0, 1 );
+                return;
+            end;
+            % Convert to original image domain.
+            rid2tlbr = bsxfun( @minus, rid2tlbr, 1 - [ imTl; imTl; ] );
+        end
+        function [ rid2out, rid2tlbr ] = initGuess( this, im, cidx2cid )
+            dilate = this.settingProp.dilate;
+            maxSide = this.settingProp.normalizeImageMaxSide;
+            maximumImageSize = this.settingProp.maximumImageSize;
+            [ r, c, ~ ] = size( im );
+            imSize0 = [ r; c; ];
+            if maxSide, imSize = normalizeImageSize( maxSide, imSize0 ); else imSize = imSize0; end;
+            sid2size = round( bsxfun( @times, this.scales, imSize ) );
+            rid2tlbr = extractDenseRegions...
+                ( imSize, sid2size, this.patchSide, this.stride, dilate, maximumImageSize );
+            rid2tlbr = round( resizeTlbr( rid2tlbr, imSize, imSize0 ) );
+            rid2out = this.extractDenseActivationsCaffe( im, cidx2cid, sid2size );
+            if size( rid2out, 2 ) ~= size( rid2tlbr, 2 ),
+                error( 'Inconsistent number of regions.\n' ); end;
+        end
+        function rid2out = extractDenseActivationsCaffe...
+                ( this, originalImage, cidx2cid, targetImageSizes )
+            regionDilate = this.settingProp.dilate;
+            maximumImageSize = this.settingProp.maximumImageSize;
+            imageDilate = round( this.patchSide * regionDilate );
+            interpolation = 'bilinear';
+            numSize = size( targetImageSizes, 2 );
+            rid2out = cell( numSize, 1 );
+            for sid = 1 : numSize,
+                imSize = targetImageSizes( :, sid );
+                if min( imSize ) + 2 * imageDilate < this.patchSide, continue; end;
+                if prod( imSize + imageDilate * 2 ) > maximumImageSize,
+                    fprintf( '%s: Warning) Im of %s rejected.\n', ...
+                        upper( mfilename ), mat2str( imSize ) ); continue;
+                end;
+                im = imresize( ...
+                    originalImage, imSize', ...
+                    'method', interpolation );
+                im = single( im );
+                roi = [ ...
+                    1 - imageDilate; ...
+                    1 - imageDilate; ...
+                    imSize( : ) + imageDilate; ];
+                im = normalizeAndCropImage( im, roi, this.rgbMean, interpolation );
+                fprintf( '%s: Feed im of %dX%d size.\n', ...
+                    upper( mfilename ), size( im, 1 ), size( im, 2 ) );
+                y = this.feedforwardCaffe( im, cidx2cid );
+                [ nr, nc, z ] = size( y );
+                y = reshape( permute( y, [ 3, 1, 2 ] ), z, nr * nc );
+                rid2out{ sid } = y;
+            end;
+            rid2out = cat( 2, rid2out{ : } );
+        end
+        function y = feedforwardCaffe( this, im, cidx2cid )
+            cidx2cid = cidx2cid( : );
+            numCls = this.db.getNumClass;
+            targetDimDir = bsxfun( @plus, repmat( ( cidx2cid' - 1 ) * 4 * 2, 4 * 2, 1 ), ( 1 : ( 4 * 2 ) )' );
+            targetDimCls = [ cidx2cid; numCls + 1; ] + 4 * 2 * numCls;
+            targetDim = [ targetDimDir( : ); targetDimCls; ];
+            weight = this.weights( :, :, :, targetDim );
+            bias = this.biases( :, targetDim );
+            [ h, w, c, n ] = size( im );
+            im = im( :, :, [ 3, 2, 1 ], : );
+            im = permute( im, [ 2, 1, 3, 4 ] );
+            im = { im };
+            this.attNet.blobs( 'data' ).reshape( [ w, h, c, n ] );
+            x = this.attNet.forward( im );
+            if numel( x ) > 1, error( 'Output should be a single.' ); end;
+            x = x{ 1 };
+            x = permute( x, [ 2, 1, 3, 4 ] );
+            x = gpuArray( x );
+            y = vl_nnconv( x, weight, bias, 'pad', 0, 'stride', 1 );
+            y = gather( y );
+            clear x;
+        end
+        function [ did2tlbr, did2score, did2cid ] = dynamicFitting...
+                ( this, rid2tlbr, nid2rid, nid2cid, im, detParams )
+            % Preparing for data.
+            numTopCls = detParams.numTopClassification;
+            numTopDir = detParams.numTopDirection;
+            dvecSize = detParams.directionVectorSize;
+            testBatchSize = 256 / 2;
+            numMaxFeed = 50;
+            interpolation = 'bilinear';
             inputCh = size( im, 3 );
             cidx2cid = unique( nid2cid );
             numTarCls = numel( cidx2cid );
@@ -497,13 +613,13 @@ classdef AttNetCaffe < handle
             did2score = did2score( did2fill );
             did2cid = did2cid( did2fill );
         end
-        function [ did2tlbr, did2score, did2cid ] = ...
-                detFromRegnsAndCls( this, rid2tlbr, nid2rid, nid2cid, im )
+        function [ did2tlbr, did2score, did2cid ] = staticFitting...
+                ( this, rid2tlbr, nid2rid, nid2cid, im, detParams )
             % Preparing for data.
+            dvecSize = detParams.directionVectorSize;
             testBatchSize = 256 / 2;
-            numMaxFeed = this.settingMain.numMaxTest;
+            numMaxFeed = 50;
             interpolation = 'bilinear';
-            dvecSize = this.settingMain.directionVectorSize;
             inputCh = size( im, 3 );
             cidx2cid = unique( nid2cid );
             numTarCls = numel( cidx2cid );
@@ -613,27 +729,140 @@ classdef AttNetCaffe < handle
             did2score = did2score( did2fill );
             did2cid = did2cid( did2fill );
         end
-        function y = feedforwardCaffe( this, im, cidx2cid )
-            cidx2cid = cidx2cid( : );
-            numCls = this.db.getNumClass;
-            targetDimDir = bsxfun( @plus, repmat( ( cidx2cid' - 1 ) * 4 * 2, 4 * 2, 1 ), ( 1 : ( 4 * 2 ) )' );
-            targetDimCls = [ cidx2cid; numCls + 1; ] + 4 * 2 * numCls;
-            targetDim = [ targetDimDir( : ); targetDimCls; ];
-            weight = this.weights( :, :, :, targetDim );
-            bias = this.biases( :, targetDim );
-            [ h, w, c, n ] = size( im );
-            im = im( :, :, [ 3, 2, 1 ], : );
-            im = permute( im, [ 2, 1, 3, 4 ] );
-            im = { im };
-            this.attNet.blobs( 'data' ).reshape( [ w, h, c, n ] );
-            x = this.attNet.forward( im );
-            if numel( x ) > 1, error( 'Output should be a single.' ); end;
-            x = x{ 1 };
-            x = permute( x, [ 2, 1, 3, 4 ] );
-            x = gpuArray( x );
-            y = vl_nnconv( x, weight, bias, 'pad', 0, 'stride', 1 );
-            y = gather( y );
-            clear x;
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Functions for file identification %
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % 1. Scales file.
+        function name = getScalesName( this )
+            numScaling = this.settingProp.numScaling;
+            maxSide = this.settingProp.normalizeImageMaxSide;
+            piormt = this.settingProp.posIntOverRegnMoreThan;
+            piormt = num2str( piormt );
+            piormt( piormt == '.' ) = 'P';
+            name = sprintf( 'SCL_TE_N%03d_PIORMT%s_NIMS%d_OF_%s', ...
+                numScaling, piormt, maxSide, this.db.getName );
+            name( strfind( name, '__' ) ) = '';
+            if name( end ) == '_', name( end ) = ''; end;
         end
+        function dir = getScalesDir( this )
+            dir = this.db.getDir;
+        end
+        function dir = makeScalesDir( this )
+            dir = this.getScalesDir;
+            if ~exist( dir, 'dir' ), mkdir( dir ); end;
+        end
+        function path = getScalesPath( this )
+            fname = strcat( this.getScalesName, '.mat' );
+            path = fullfile( this.getScalesDir, fname );
+        end
+        % 2. Proposal file.
+        function name = getPropName( this )
+            name = sprintf( 'ANETCAF_PROP_%s_OF_%s', ...
+                this.settingProp.changes, this.attNetName );
+            name( strfind( name, '__' ) ) = '';
+            if name( end ) == '_', name( end ) = ''; end;
+        end
+        function dir = getPropDir( this )
+            name = this.getPropName;
+            if length( name ) > 150,
+                name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) );
+                name = sprintf( '%010d', name );
+                name = strcat( 'ANETCAF_PROP_', name );
+            end
+            dir = fullfile( this.db.dstDir, name );
+        end
+        function dir = makePropDir( this )
+            dir = this.getPropDir;
+            if ~exist( dir, 'dir' ), mkdir( dir ); end;
+        end
+        function fpath = getPropPath( this, iid )
+            fname = sprintf( 'ID%06d.mat', iid );
+            fpath = fullfile( this.getPropDir, fname );
+        end
+        % 3. Detection0 file.
+        function name = getDet0Name( this )
+            name = sprintf( 'ANETCAF_DET0_%s_OF_%s', ...
+                this.settingDet0.changes, this.getPropName );
+            name( strfind( name, '__' ) ) = '';
+            if name( end ) == '_', name( end ) = ''; end;
+        end
+        function dir = getDet0Dir( this )
+            name = this.getDet0Name;
+            if length( name ) > 150,
+                name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) );
+                name = sprintf( '%010d', name );
+                name = strcat( 'ANETCAF_DET0_', name );
+            end
+            dir = fullfile( this.db.dstDir, name );
+        end
+        function dir = makeDet0Dir( this )
+            dir = this.getDet0Dir;
+            if ~exist( dir, 'dir' ), mkdir( dir ); end;
+        end
+        function fpath = getDet0Path( this, iid )
+            fname = sprintf( 'ID%06d.mat', iid );
+            fpath = fullfile( this.getDet0Dir, fname );
+        end
+        % 4. Detection1 file.
+        function name = getDet1Name( this )
+            name = sprintf( 'ANETCAF_DET1_%s_OF_%s_OF_%s', ...
+                this.settingDet1.changes, this.settingMrg0.changes, this.getDet0Name );
+            name( strfind( name, '__' ) ) = '';
+            if name( end ) == '_', name( end ) = ''; end;
+        end
+        function dir = getDet1Dir( this )
+            name = this.getDet1Name;
+            if length( name ) > 150,
+                name = sum( ( name - 0 ) .* ( 1 : numel( name ) ) );
+                name = sprintf( '%010d', name );
+                name = strcat( 'ANETCAF_DET1_', name );
+            end
+            dir = fullfile( this.db.dstDir, name );
+        end
+        function dir = makeDet1Dir( this )
+            dir = this.getDet1Dir;
+            if ~exist( dir, 'dir' ), mkdir( dir ); end;
+        end
+        function fpath = getDet1Path( this, iid )
+            fname = sprintf( 'ID%06d.mat', iid );
+            fpath = fullfile( this.getDet1Dir, fname );
+        end
+    end
+    methods( Static )
+       function [ rid2tlbr, rid2score, rid2cid ] = merge...
+               ( rid2tlbr, rid2score, rid2cid, mrgParams )
+            mergingOverlap = mrgParams.mergingOverlap;
+            mergingType = mrgParams.mergingType;
+            mergingMethod = mrgParams.mergingMethod;
+            minNumSuppBox = mrgParams.minimumNumSupportBox;
+            if mergingOverlap == 1, return; end;
+            cids = unique( rid2cid );
+            numCls = numel( cids );
+            rid2tlbr_ = cell( numCls, 1 );
+            rid2score_ = cell( numCls, 1 );
+            rid2cid_ = cell( numCls, 1 );
+            for cidx = 1 : numCls,
+                cid = cids( cidx );
+                rid2ok = rid2cid == cid;
+                switch mergingType,
+                    case 'NMS',
+                        [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = nms( ...
+                            [ rid2tlbr( :, rid2ok ); rid2score( rid2ok ); ]', ...
+                            mergingOverlap, minNumSuppBox, mergingMethod );
+                        rid2tlbr_{ cidx } = rid2tlbr_{ cidx }';
+                    case 'OV',
+                        [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = ov( ...
+                            rid2tlbr( :, rid2ok ), rid2score( rid2ok ), ...
+                            mergingOverlap, minNumSuppBox, mergingMethod );
+                end
+                rid2cid_{ cidx } = cid * ones( size( rid2score_{ cidx } ) );
+            end;
+            rid2tlbr = cat( 2, rid2tlbr_{ : } );
+            rid2score = cat( 1, rid2score_{ : } );
+            rid2cid = cat( 1, rid2cid_{ : } );
+            [ rid2score, idx ] = sort( rid2score, 'descend' );
+            rid2tlbr = rid2tlbr( :, idx );
+            rid2cid = rid2cid( idx );
+        end 
     end
 end
