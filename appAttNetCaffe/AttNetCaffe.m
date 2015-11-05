@@ -261,11 +261,17 @@ classdef AttNetCaffe < handle
             title( sprintf( 'Detection1, IID%06d', iid ) ); hold off;
             setFigPos( gcf, [ 3, 6, 1, 5 ] ); drawnow;
             % Demo 5: Merge1.
-            [ rid2tlbr, ~, rid2cid ] = this.merge...
+            [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                 ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
             rid2tlbr = round( rid2tlbr );
             figure; set( gcf, 'color', 'w' );
-            plottlbr( rid2tlbr, im, false, 'c', this.db.cid2name( rid2cid ) );
+            rid2title = cell( size( rid2score ) );
+            for rid = 1 : numel( rid2score ),
+                cname = this.db.cid2name{ rid2cid( rid ) };
+                score = rid2score( rid );
+                rid2title{ rid } = sprintf( '%s(%.1f)', cname, score );
+            end;
+            plottlbr( rid2tlbr, im, false, 'c', rid2title );
             title( sprintf( 'Merge1, IID%06d', iid ) ); hold off;
             setFigPos( gcf, [ 3, 6, 1, 6 ] ); drawnow;
         end
