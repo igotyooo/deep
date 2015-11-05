@@ -148,7 +148,17 @@ classdef AttNetCaffe < handle
             this.directions.did2vecBr = [ [ cos( did2angBr' ); sin( did2angBr' ); ], [ 0; 0; ] ];
             fprintf( '%s: Done.\n', upper( mfilename ) );
         end
-        function [ rid2tlbr, nid2rid, nid2cid ] = iid2prop( this, iid, cidx2cid )
+        function [ rid2tlbr, nid2rid, nid2cid ] = iid2prop( this, iid )
+            try
+                numTop = this.settingProp.numTopClassification;
+                [ ~, fname ] = fileparts( this.db.iid2impath{ iid } );
+                fpath = fullfile( this.db.dstDir, 'CLASS_PROVIDER', strcat( fname, '.mat' ) );
+                data = load( fpath );
+                [ ~, rank2cid ] = sort( data.scores, 'descend' );
+                cidx2cid = rank2cid( 1 : numTop );
+            catch
+                cidx2cid = 1 : this.db.getNumClass;
+            end;
             fpath = this.getPropPath( iid );
             try
                 data = load( fpath );
@@ -161,7 +171,7 @@ classdef AttNetCaffe < handle
                 save( fpath, 'rid2tlbr', 'nid2rid', 'nid2cid' );
             end;
         end
-        function [ rid2tlbr, rid2score, rid2cid ] = iid2det0( this, iid, cidx2cid )
+        function [ rid2tlbr, rid2score, rid2cid ] = iid2det0( this, iid )
             fpath = this.getDet0Path( iid );
             try
                 data = load( fpath );
@@ -170,7 +180,7 @@ classdef AttNetCaffe < handle
                 rid2cid = data.rid2cid;
             catch
                 % 1. Get regions.
-                [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid, cidx2cid );
+                [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid );
                 % 2. Tighten regions.
                 [ rid2tlbr, rid2score, rid2cid ] = this.iid2det...
                     ( iid, rid2tlbr, nid2rid, nid2cid, this.settingDet0 );
@@ -183,7 +193,7 @@ classdef AttNetCaffe < handle
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
             end;
         end
-        function [ rid2tlbr, rid2score, rid2cid ] = iid2det1( this, iid, cidx2cid )
+        function [ rid2tlbr, rid2score, rid2cid ] = iid2det1( this, iid )
             fpath = this.getDet1Path( iid );
             try
                 data = load( fpath );
@@ -192,7 +202,7 @@ classdef AttNetCaffe < handle
                 rid2cid = data.rid2cid;
             catch
                 % 1. Get regions.
-                [ rid2tlbr, ~, rid2cid ] = this.iid2det0( iid, cidx2cid );
+                [ rid2tlbr, ~, rid2cid ] = this.iid2det0( iid );
                 nid2rid = 1 : numel( rid2cid );
                 nid2cid = rid2cid;
                 % 2. Tighten regions.
@@ -207,10 +217,10 @@ classdef AttNetCaffe < handle
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
             end;
         end
-        function demoDet( this, iid, cidx2cid )
+        function demoDet( this, iid )
             im = imread( this.db.iid2impath{ iid } );
             % Demo 1: proposals.
-            [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid, cidx2cid );
+            [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid );
             rid2tlbr = round( rid2tlbr );
             figure; set( gcf, 'color', 'w' );
             plottlbr( rid2tlbr, im, false, { 'r'; 'g'; 'b'; 'y' } );
@@ -293,7 +303,7 @@ classdef AttNetCaffe < handle
             cummt = 0;
             for iidx = 1 : numIm; itime = tic;
                 iid = iids( iidx );
-                this.iid2det0( iid, cidx2cid );
+                this.iid2det0( iid );
                 cummt = cummt + toc( itime );
                 fprintf( '%s: ', upper( mfilename ) );
                 disploop( numIm, iidx, sprintf( 'Det0 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
@@ -396,7 +406,7 @@ classdef AttNetCaffe < handle
                 rid2supp = cat( 2, rid2supp{ : } );
                 if ~isempty( rid2supp ),
                     rid2tlbrSupp = round( rid2supp( 1 : 4, : ) );
-                    nid2cidSupp = cidx2cid( rid2supp( 5, : )' )';
+                    nid2cidSupp = cidx2cid( rid2supp( 5, : ) )';
                     nid2ridSupp = size( rid2tlbr, 2 ) + ( 1 : numel( nid2cidSupp ) )';
                     rid2tlbr = cat( 2, rid2tlbr, rid2tlbrSupp );
                     nid2cid = cat( 1, nid2cid,  nid2cidSupp );
