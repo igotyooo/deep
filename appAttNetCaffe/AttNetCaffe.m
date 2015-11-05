@@ -21,7 +21,6 @@ classdef AttNetCaffe < handle
         function this = AttNetCaffe...
                 ( db, settingProp, settingDet0, settingMrg0, settingDet1, settingMrg1 )
             this.db                                   = db;
-            this.settingProp.numBaseProposal          = 0;
             this.settingProp.normalizeImageMaxSide    = 500;
             this.settingProp.numScaling               = 12;
             this.settingProp.dilate                   = 1 / 2;
@@ -399,18 +398,6 @@ classdef AttNetCaffe < handle
                 rid2tlbr = cat( 2, rid2tlbr, rid2tlbrSupp );
                 nid2cid = cat( 1, nid2cid,  nid2cidSupp );
                 nid2rid = cat( 1, nid2rid, nid2ridSupp );
-            end;
-            % Add base proposals.
-            numAdd = this.settingProp.numBaseProposal;
-            if numAdd,
-                numProp = size( rid2tlbr, 2 );
-                [ r, c, ~ ] = size( im );
-                scaling = sqrt( 2 .^ ( -1 : ( -1 + numAdd - 1 ) ) );
-                newProp = round( scaleBoxes( repmat( [ 1; 1; r; c; ], 1, numAdd ), scaling, scaling ) );
-                rid2tlbr = cat( 2, rid2tlbr, newProp );
-                nid2cid = cat( 1, nid2cid, repmat( cidx2cid', numAdd, 1 ) );
-                newRids = repmat( numProp + ( 1 : numAdd ), numTarCls, 1 );
-                nid2rid = cat( 1, nid2rid, newRids( : ) );
             end;
             if isempty( rid2tlbr ),
                 rid2tlbr = zeros( 4, 0 );
