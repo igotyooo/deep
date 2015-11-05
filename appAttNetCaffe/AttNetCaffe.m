@@ -785,12 +785,14 @@ classdef AttNetCaffe < handle
                     end;
                 end;
                 rid2supp = cat( 2, rid2supp{ : } );
-                did2tlbrSupp = round( rid2supp( 1 : 4, : ) );
-                did2cidSupp = cidx2cid( rid2supp( 5, : ) )';
-                did2scoreSupp = rid2supp( 6, : )';
-                did2tlbr = cat( 2, did2tlbr, did2tlbrSupp );
-                did2cid = cat( 1, did2cid, did2cidSupp );
-                did2score = cat( 1, did2score,  did2scoreSupp );
+                if ~isempty( rid2supp ),
+                    did2tlbrSupp = round( rid2supp( 1 : 4, : ) );
+                    did2cidSupp = cidx2cid( rid2supp( 5, : ) )';
+                    did2scoreSupp = rid2supp( 6, : )';
+                    did2tlbr = cat( 2, did2tlbr, did2tlbrSupp );
+                    did2cid = cat( 1, did2cid, did2cidSupp );
+                    did2score = cat( 1, did2score,  did2scoreSupp );
+                end;
             end;
         end
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
