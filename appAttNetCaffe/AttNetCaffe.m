@@ -287,7 +287,7 @@ classdef AttNetCaffe < handle
             title( sprintf( 'Merge1, IID%06d', iid ) ); hold off;
             setFigPos( gcf, [ 3, 6, 1, 6 ] ); drawnow;
         end
-        function subDbDet0( this, cidx2cid, numDiv, divId )
+        function subDbDet0( this, numDiv, divId )
             iids = this.db.getTeiids;
             numIm = numel( iids );
             divSize = ceil( numIm / numDiv );
