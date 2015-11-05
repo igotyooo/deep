@@ -16,6 +16,9 @@ path.db.ilsvrcdet2015te.root            = '/iron/db/ILSVRC2015';
 path.db.ilsvrcclsloc2015.name           = 'ILSVRCCLSLOC2015';
 path.db.ilsvrcclsloc2015.funh           = @DB_ILSVRCCLSLOC2015;
 path.db.ilsvrcclsloc2015.root           = '/iron/db/ILSVRC2015';
+path.db.ilsvrcclsloc2015te.name         = 'ILSVRCCLSLOC2015TE';
+path.db.ilsvrcclsloc2015te.funh         = @DB_ILSVRCCLSLOC2015TE;
+path.db.ilsvrcclsloc2015te.root         = '/iron/db/ILSVRC2015';
 % Set pre-trained Caffe AttNet path only.
 path.attNetCaffe.ilsdet.modelPath       = '/iron/data/TRAINED_NETS_CAFFE/attNet_gnet_ilsdet_e8_x2.caffemodel';
 path.attNetCaffe.ilsdet.protoPath       = '/iron/data/TRAINED_NETS_CAFFE/attNet_gnet_ilsdet.prototxt';
