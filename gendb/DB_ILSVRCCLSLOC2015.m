@@ -7,10 +7,6 @@ function [  cid2name, ...
             oid2iid, ...
             oid2bbox, ...
             oid2cont ] = DB_ILSVRCCLSLOC2015
-    
-    clc; close all; fclose all; clear all;
-    addpath( genpath( '..' ) ); init;
-    
     global path;
     dirRoot = path.db.ilsvrcclsloc2015.root;
     fprintf( 'Read training image list.\n' );
