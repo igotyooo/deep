@@ -394,7 +394,7 @@ classdef AttNetCaffe < handle
                 rid2supp = cat( 2, rid2supp{ : } );
                 if ~isempty( rid2supp ),
                     rid2tlbrSupp = round( rid2supp( 1 : 4, : ) );
-                    nid2cidSupp = cidx2cid( rid2supp( 5, : )' );
+                    nid2cidSupp = cidx2cid( rid2supp( 5, : )' )';
                     nid2ridSupp = size( rid2tlbr, 2 ) + ( 1 : numel( nid2cidSupp ) )';
                     rid2tlbr = cat( 2, rid2tlbr, rid2tlbrSupp );
                     nid2cid = cat( 1, nid2cid,  nid2cidSupp );
