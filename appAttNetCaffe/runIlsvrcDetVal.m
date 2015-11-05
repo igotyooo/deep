@@ -22,9 +22,8 @@ function runIlsvrcDetVal( numDiv, divId, gpuId )
     reset( gpuDevice( setting.gpus ) );
     db = Db( setting.db, path.dstDir );
     db.genDb;
-    cidx2cid = 1 : db.getNumClass;
     attNet = AttNetCaffe( db, setting.attNetProp, setting.attNetDet0, [  ], [  ], [  ] );
     attNet.init( setting.netInfo, setting.gpus );
-    attNet.subDbDet0( cidx2cid, numDiv, divId );
+    attNet.subDbDet0( numDiv, divId );
     caffe.reset_all(  );
 end

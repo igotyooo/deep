@@ -25,10 +25,9 @@ function runIlsvrcDetTest( numDiv, divId, gpuId )
     db.genDb;
     dbte = Db( setting.dbte, path.dstDir );
     dbte.genDb;
-    cidx2cid = 1 : db.getNumClass;
     attNet = AttNetCaffe( db, setting.attNetProp, setting.attNetDet0, [  ], [  ], [  ] );
     attNet.init( setting.netInfo, setting.gpus );
     attNet.db = dbte;
-    attNet.subDbDet0( cidx2cid, numDiv, divId );
+    attNet.subDbDet0( numDiv, divId );
     caffe.reset_all(  );
 end
