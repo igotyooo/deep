@@ -386,7 +386,9 @@ classdef AttNetCaffe < handle
                     cid = cidx2cid( cidx );
                     numAdd = max( minNumDetPerCls - sum( nid2cid == cid ), 0 );
                     if numAdd,
-                        [ ~, rank2rid ] = sort( rid2score( rid2cidx == cidx ), 2, 'descend' );
+                        idx2rid = find( rid2cidx == cidx );
+                        [ ~, rank2idx ] = sort( rid2score( idx2rid ), 2, 'descend' );
+                        rank2rid = idx2rid( rank2idx );
                         top = rank2rid( 1 : min( numAdd, numel( rank2rid ) ) );
                         rid2supp{ cidx } = rid2history( :, top );
                     end;
@@ -781,7 +783,9 @@ classdef AttNetCaffe < handle
                     cid = cidx2cid( cidx );
                     numAdd = max( minNumDetPerCls - sum( did2cid == cid ), 0 );
                     if numAdd,
-                        [ ~, rank2rid ] = sort( rid2score( rid2cidx == cidx ), 2, 'descend' );
+                        idx2rid = find( rid2cidx == cidx );
+                        [ ~, rank2idx ] = sort( rid2score( idx2rid ), 2, 'descend' );
+                        rank2rid = idx2rid( rank2idx );
                         top = rank2rid( 1 : min( numAdd, numel( rank2rid ) ) );
                         rid2supp{ cidx } = rid2history( :, top );
                     end;
