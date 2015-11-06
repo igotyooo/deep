@@ -217,7 +217,7 @@ classdef AttNetCaffe < handle
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
             end;
         end
-        function demoDet( this, iid )
+        function demoDet( this, iid, wait )
             im = imread( this.db.iid2impath{ iid } );
             % Demo 1: proposals.
             [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid );
@@ -276,16 +276,31 @@ classdef AttNetCaffe < handle
             [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                 ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
             rid2tlbr = round( rid2tlbr );
+            [ ~, rank2rid ] = sort( rid2score, 'descend' );
+            rid2tlbr = rid2tlbr( :, rank2rid );
+            rid2score = rid2score( rank2rid );
+            rid2cid = rid2cid( rank2rid );
+            cids = unique( rid2cid, 'stable' );
+            cids = cids( : );
             figure; set( gcf, 'color', 'w' );
-            rid2title = cell( size( rid2score ) );
-            for rid = 1 : numel( rid2score ),
-                cname = this.db.cid2name{ rid2cid( rid ) };
-                score = rid2score( rid );
-                rid2title{ rid } = sprintf( '%s(%.1f)', cname, score );
+            for cid = cids',
+                rid2ok = rid2cid == cid;
+                if ~wait, rid2ok = true( size( rid2cid ) ); end;
+                rid2tlbr_ = rid2tlbr( :, rid2ok );
+                rid2score_ = rid2score( rid2ok );
+                rid2cid_ = rid2cid( rid2ok );
+                rid2title_ = cell( size( rid2score_ ) );
+                for rid = 1 : numel( rid2score_ ),
+                    cname = this.db.cid2name{ rid2cid_( rid ) };
+                    score = rid2score_( rid );
+                    rid2title_{ rid } = sprintf( '%s(%.1f)', cname, score );
+                end;
+                plottlbr( rid2tlbr_, im, false, 'c', rid2title_ );
+                title( sprintf( 'Merge1, IID%06d', iid ) ); hold off;
+                setFigPos( gcf, [ 3, 6, 1, 6 ] ); drawnow;
+                if ~wait, break; end;
+                waitforbuttonpress;
             end;
-            plottlbr( rid2tlbr, im, false, 'c', rid2title );
-            title( sprintf( 'Merge1, IID%06d', iid ) ); hold off;
-            setFigPos( gcf, [ 3, 6, 1, 6 ] ); drawnow;
         end
         function subDbDet0( this, numDiv, divId )
             iids = this.db.getTeiids;
