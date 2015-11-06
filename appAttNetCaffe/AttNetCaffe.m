@@ -312,6 +312,7 @@ classdef AttNetCaffe < handle
             fprintf( '%s: Check if detections exist.\n', upper( mfilename ) );
             paths = arrayfun( @( iid )this.getDet0Path( iid ), iids, 'UniformOutput', false );
             exists = cellfun( @( path )exist( path, 'file' ), paths );
+            if all( exists ), fprintf( '%s: All done.\n', upper( mfilename ) ); return; end;
             this.makeDet0Dir;
             iids = iids( ~exists );
             numIm = numel( iids );
@@ -322,6 +323,29 @@ classdef AttNetCaffe < handle
                 cummt = cummt + toc( itime );
                 fprintf( '%s: ', upper( mfilename ) );
                 disploop( numIm, iidx, sprintf( 'Det0 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
+            end;
+        end
+        function subDbDet1( this, numDiv, divId )
+            iids = this.db.getTeiids;
+            numIm = numel( iids );
+            divSize = ceil( numIm / numDiv );
+            sidx = divSize * ( divId - 1 ) + 1;
+            eidx = min( sidx + divSize - 1, numIm );
+            iids = iids( sidx : eidx );
+            fprintf( '%s: Check if detections exist.\n', upper( mfilename ) );
+            paths = arrayfun( @( iid )this.getDet1Path( iid ), iids, 'UniformOutput', false );
+            exists = cellfun( @( path )exist( path, 'file' ), paths );
+            if all( exists ), fprintf( '%s: All done.\n', upper( mfilename ) ); return; end;
+            this.makeDet1Dir;
+            iids = iids( ~exists );
+            numIm = numel( iids );
+            cummt = 0;
+            for iidx = 1 : numIm; itime = tic;
+                iid = iids( iidx );
+                this.iid2det1( iid );
+                cummt = cummt + toc( itime );
+                fprintf( '%s: ', upper( mfilename ) );
+                disploop( numIm, iidx, sprintf( 'Det1 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
             end;
         end
     end
