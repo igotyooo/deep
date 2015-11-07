@@ -11,10 +11,12 @@ function runIlsvrcLocVal( numDiv, divId, gpuId )
     setting.attNetProp.maximumImageSize         = 9e6;
     setting.attNetProp.numTopClassification     = 10;
     setting.attNetProp.numTopDirection          = 1;
+    setting.attNetProp.onlyTargetAndBackground  = false;
     setting.attNetProp.directionVectorSize      = 30;
     setting.attNetProp.minNumDetectionPerClass  = 3;
     setting.attNetDet0.type                     = 'STATIC';
     setting.attNetDet0.rescaleBox               = 1;
+    setting.attNetDet0.onlyTargetAndBackground  = setting.attNetProp.onlyTargetAndBackground;
     setting.attNetDet0.directionVectorSize      = setting.attNetProp.directionVectorSize;
     setting.attNetDet0.minNumDetectionPerClass  = setting.attNetProp.minNumDetectionPerClass;
     reset( gpuDevice( setting.gpus ) );
