@@ -191,6 +191,13 @@ classdef AttNetCaffe < handle
                 % 3. Merge regions.
                 [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
+                imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
+                [ rid2tlbr, idx ] = bndtlbr( rid2tlbr, imbnd );
+                if numel( rid2score ) ~= numel( idx ),
+                    rid2tlbr_ = repmat( imbnd, 1, numel( rid2score ) );
+                    rid2tlbr_( :, idx ) = rid2tlbr;
+                    rid2tlbr = rid2tlbr_;
+                end;
             end;
         end
         function [ rid2tlbr, rid2score, rid2cid ] = iid2det1( this, iid )
@@ -215,6 +222,13 @@ classdef AttNetCaffe < handle
                 % 3. Merge regions.
                 [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
+                imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
+                [ rid2tlbr, idx ] = bndtlbr( rid2tlbr, imbnd );
+                if numel( rid2score ) ~= numel( idx ),
+                    rid2tlbr_ = repmat( imbnd, 1, numel( rid2score ) );
+                    rid2tlbr_( :, idx ) = rid2tlbr;
+                    rid2tlbr = rid2tlbr_;
+                end;
             end;
         end
         function demoDet( this, iid, wait )
@@ -247,6 +261,13 @@ classdef AttNetCaffe < handle
             % Demo 3: Merge0.
             [ rid2tlbr, ~, rid2cid ] = this.merge...
                 ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
+            imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
+            [ rid2tlbr, idx ] = bndtlbr( rid2tlbr, imbnd );
+            if numel( rid2cid ) ~= numel( idx ),
+                rid2tlbr_ = repmat( imbnd, 1, numel( rid2score ) );
+                rid2tlbr_( :, idx ) = rid2tlbr;
+                rid2tlbr = rid2tlbr_;
+            end;
             rid2tlbr = round( rid2tlbr );
             figure; set( gcf, 'color', 'w' );
             plottlbr( rid2tlbr, im, false, 'c', this.db.cid2name( rid2cid ) );
@@ -275,6 +296,13 @@ classdef AttNetCaffe < handle
             % Demo 5: Merge1.
             [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                 ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
+            imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
+            [ rid2tlbr, idx ] = bndtlbr( rid2tlbr, imbnd );
+            if numel( rid2score ) ~= numel( idx ),
+                rid2tlbr_ = repmat( imbnd, 1, numel( rid2score ) );
+                rid2tlbr_( :, idx ) = rid2tlbr;
+                rid2tlbr = rid2tlbr_;
+            end;
             rid2tlbr = round( rid2tlbr );
             [ ~, rank2rid ] = sort( rid2score, 'descend' );
             rid2tlbr = rid2tlbr( :, rank2rid );
