@@ -304,11 +304,7 @@ classdef AttNetCaffe < handle
         end
         function subDbDet0( this, numDiv, divId )
             iids = this.db.getTeiids;
-            numIm = numel( iids );
-            divSize = ceil( numIm / numDiv );
-            sidx = divSize * ( divId - 1 ) + 1;
-            eidx = min( sidx + divSize - 1, numIm );
-            iids = iids( sidx : eidx );
+            iids = iids( divId : numDiv : numel( iids ) );
             fprintf( '%s: Check if detections exist.\n', upper( mfilename ) );
             paths = arrayfun( @( iid )this.getDet0Path( iid ), iids, 'UniformOutput', false );
             exists = cellfun( @( path )exist( path, 'file' ), paths );
@@ -327,11 +323,7 @@ classdef AttNetCaffe < handle
         end
         function subDbDet1( this, numDiv, divId )
             iids = this.db.getTeiids;
-            numIm = numel( iids );
-            divSize = ceil( numIm / numDiv );
-            sidx = divSize * ( divId - 1 ) + 1;
-            eidx = min( sidx + divSize - 1, numIm );
-            iids = iids( sidx : eidx );
+            iids = iids( divId : numDiv : numel( iids ) );
             fprintf( '%s: Check if detections exist.\n', upper( mfilename ) );
             paths = arrayfun( @( iid )this.getDet1Path( iid ), iids, 'UniformOutput', false );
             exists = cellfun( @( path )exist( path, 'file' ), paths );
