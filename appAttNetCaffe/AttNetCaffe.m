@@ -28,12 +28,14 @@ classdef AttNetCaffe < handle
             this.settingProp.maximumImageSize         = 9e6;
             this.settingProp.numTopClassification     = 1;
             this.settingProp.numTopDirection          = 1;
+            this.settingProp.onlyTargetAndBackground  = false;
             this.settingProp.directionVectorSize      = 30;
             this.settingProp.minNumDetectionPerClass  = 0;
             this.settingDet0.type                     = 'DYNAMIC';
             this.settingDet0.rescaleBox               = 1;
             this.settingDet0.numTopClassification     = 1;          % Ignored if 'STATIC'.
             this.settingDet0.numTopDirection          = 1;          % Ignored if 'STATIC'.
+            this.settingDet0.onlyTargetAndBackground  = false;      % Ignored if 'DYNAMIC'.
             this.settingDet0.directionVectorSize      = 30;
             this.settingDet0.minNumDetectionPerClass  = 0;
             this.settingMrg0.mergingOverlap           = 0.8;
@@ -44,6 +46,7 @@ classdef AttNetCaffe < handle
             this.settingDet1.rescaleBox               = 2.5;
             this.settingDet1.numTopClassification     = 1;          % Ignored if 'STATIC'.
             this.settingDet1.numTopDirection          = 1;          % Ignored if 'STATIC'.
+            this.settingDet1.onlyTargetAndBackground  = false;      % Ignored if 'DYNAMIC'.
             this.settingDet1.directionVectorSize      = 30;
             this.settingDet1.minNumDetectionPerClass  = 0;
             this.settingMrg1.mergingOverlap           = 0.6;
@@ -442,6 +445,7 @@ classdef AttNetCaffe < handle
             dvecSize = this.settingProp.directionVectorSize;
             numTopCls = this.settingProp.numTopClassification;
             numTopDir = this.settingProp.numTopDirection;
+            onlyTarAndBgd = this.settingProp.onlyTargetAndBackground;
             signStop = 4;
             signDiag = 2;
             numTarCls = numel( cidx2cid );
@@ -478,9 +482,15 @@ classdef AttNetCaffe < handle
                     rid2history{ cidx } = cat( 1, rid2tlbr( 1 : 4, : ), cidx * ones( 1, size( rid2tlbr, 2 ) ), rid2score );
                 end;
                 % Classification.
-                rid2bgd = rid2rank2cidx( 1, : ) == ( numTarCls + 1 );
-                rid2okCls = any( rid2rank2cidx( 1 : min( numTopCls, numDimClsLyr ), : ) == cidx, 1 );
-                rid2okCls = rid2okCls & ( ~rid2bgd );
+                if onlyTarAndBgd,
+                    rid2bgdScore = rid2outCls( numTarCls + 1, : );
+                    rid2tarScore = rid2outCls( cidx, : );
+                    rid2okCls = rid2tarScore > rid2bgdScore;
+                else
+                    rid2bgd = rid2rank2cidx( 1, : ) == ( numTarCls + 1 );
+                    rid2okCls = any( rid2rank2cidx( 1 : min( numTopCls, numDimClsLyr ), : ) == cidx, 1 );
+                    rid2okCls = rid2okCls & ( ~rid2bgd );
+                end;
                 % Update.
                 rid2cont = rid2dd & rid2okCls;
                 numCont = sum( rid2cont );
@@ -781,6 +791,7 @@ classdef AttNetCaffe < handle
         function [ did2tlbr, did2score, did2cid ] = staticFitting...
                 ( this, rid2tlbr, nid2rid, nid2cid, im, detParams )
             % Preparing for data.
+            onlyTarAndBgd = detParams.onlyTargetAndBackground;
             dvecSize = detParams.directionVectorSize;
             minNumDetPerCls = detParams.minNumDetectionPerClass;
             testBatchSize = 256 / 2;
@@ -842,7 +853,13 @@ classdef AttNetCaffe < handle
                     crid2out = rid2out( :, rid2tar );
                     crid2outCls = rid2outCls( :, rid2tar );
                     crid2cidx = rid2cidx( rid2tar );
-                    crid2fgd = crid2cidx ~= ( numTarCls + 1 );
+                    if onlyTarAndBgd,
+                        crid2bgdScore = crid2outCls( numTarCls + 1, : );
+                        crid2tarScore = crid2outCls( cidx, : );
+                        crid2fgd = crid2tarScore > crid2bgdScore;
+                    else
+                        crid2fgd = crid2cidx ~= ( numTarCls + 1 );
+                    end;
                     dimTl = ( cidx - 1 ) * numDimPerDirLyr * 2 + 1;
                     dimTl = dimTl : dimTl + numDimPerDirLyr - 1;
                     dimBr = dimTl + numDimPerDirLyr;
