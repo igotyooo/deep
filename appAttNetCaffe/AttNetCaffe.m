@@ -384,6 +384,24 @@ classdef AttNetCaffe < handle
             rid2cid = cat( 1, rid2cid{ : } );
             rid2iid = cat( 1, rid2iid{ : } );
         end;
+        function [ idx2vec, idx2iid ] = getClsPrvidrDb( this, numDiv, divId )
+            iids = this.db.getTeiids;
+            idx2iid = iids( divId : numDiv : numel( iids ) );
+            numIm = numel( idx2iid );
+            idx2vec = cell( numIm, 1 );
+            cummt = 0;
+            for iidx = 1 : numIm; itime = tic;
+                iid = idx2iid( iidx );
+                [ ~, fname ] = fileparts( this.db.iid2impath{ iid } );
+                fpath = fullfile( this.db.dstDir, 'CLASS_PROVIDER', strcat( fname, '.mat' ) );
+                data = load( fpath );
+                idx2vec{ iidx } = data.scores';
+                cummt = cummt + toc( itime );
+                fprintf( '%s: ', upper( mfilename ) );
+                disploop( numIm, iidx, sprintf( 'Get class provider on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
+            end;
+            idx2vec = cat( 2, idx2vec{ : } );
+        end;
     end
     methods( Access = private )
         function [ rid2tlbr, nid2rid, nid2cid ] = iid2propWrapper( this, iid, cidx2cid )
