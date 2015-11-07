@@ -340,6 +340,50 @@ classdef AttNetCaffe < handle
                 disploop( numIm, iidx, sprintf( 'Det1 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
             end;
         end
+        function [ rid2tlbr, rid2score, rid2cid, rid2iid ] = getSubDbDet0( this,  numDiv, divId )
+            iids = this.db.getTeiids;
+            iids = iids( divId : numDiv : numel( iids ) );
+            numIm = numel( iids );
+            rid2tlbr = cell( numIm, 1 );
+            rid2score = cell( numIm, 1 );
+            rid2cid = cell( numIm, 1 );
+            rid2iid = cell( numIm, 1 );
+            cummt = 0;
+            for iidx = 1 : numIm; itime = tic;
+                iid = iids( iidx );
+                [ rid2tlbr{ iidx }, rid2score{ iidx }, rid2cid{ iidx } ] = this.iid2det0( iid );
+                rid2iid{ iidx } = iid * ones( size( rid2score{ iidx } ) );
+                cummt = cummt + toc( itime );
+                fprintf( '%s: ', upper( mfilename ) );
+                disploop( numIm, iidx, sprintf( 'Get det1 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
+            end;
+            rid2tlbr = cat( 2, rid2tlbr{ : } );
+            rid2score = cat( 1, rid2score{ : } );
+            rid2cid = cat( 1, rid2cid{ : } );
+            rid2iid = cat( 1, rid2iid{ : } );
+        end;
+        function [ rid2tlbr, rid2score, rid2cid, rid2iid ] = getSubDbDet1( this,  numDiv, divId )
+            iids = this.db.getTeiids;
+            iids = iids( divId : numDiv : numel( iids ) );
+            numIm = numel( iids );
+            rid2tlbr = cell( numIm, 1 );
+            rid2score = cell( numIm, 1 );
+            rid2cid = cell( numIm, 1 );
+            rid2iid = cell( numIm, 1 );
+            cummt = 0;
+            for iidx = 1 : numIm; itime = tic;
+                iid = iids( iidx );
+                [ rid2tlbr{ iidx }, rid2score{ iidx }, rid2cid{ iidx } ] = this.iid2det1( iid );
+                rid2iid{ iidx } = iid * ones( size( rid2score{ iidx } ) );
+                cummt = cummt + toc( itime );
+                fprintf( '%s: ', upper( mfilename ) );
+                disploop( numIm, iidx, sprintf( 'Get det1 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
+            end;
+            rid2tlbr = cat( 2, rid2tlbr{ : } );
+            rid2score = cat( 1, rid2score{ : } );
+            rid2cid = cat( 1, rid2cid{ : } );
+            rid2iid = cat( 1, rid2iid{ : } );
+        end;
     end
     methods( Access = private )
         function [ rid2tlbr, nid2rid, nid2cid ] = iid2propWrapper( this, iid, cidx2cid )
