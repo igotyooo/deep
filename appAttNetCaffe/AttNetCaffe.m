@@ -192,7 +192,6 @@ classdef AttNetCaffe < handle
             end;
             if nargout,
                 % 3. Merge regions.
-                rid2score = 1 ./ ( 1 + exp( -rid2score ) );
                 [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
                 imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
@@ -224,7 +223,6 @@ classdef AttNetCaffe < handle
             end;
             if nargout,
                 % 3. Merge regions.
-                rid2score = 1 ./ ( 1 + exp( -rid2score ) );
                 [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
                 imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
@@ -264,7 +262,6 @@ classdef AttNetCaffe < handle
             title( sprintf( 'Detection0, IID%06d', iid ) ); hold off;
             setFigPos( gcf, [ 3, 6, 1, 3 ] ); drawnow;
             % Demo 3: Merge0.
-            rid2score = 1 ./ ( 1 + exp( -rid2score ) );
             [ rid2tlbr, ~, rid2cid ] = this.merge...
                 ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
             imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
@@ -300,7 +297,6 @@ classdef AttNetCaffe < handle
             title( sprintf( 'Detection1, IID%06d', iid ) ); hold off;
             setFigPos( gcf, [ 3, 6, 1, 5 ] ); drawnow;
             % Demo 5: Merge1.
-            rid2score = 1 ./ ( 1 + exp( -rid2score ) );
             [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                 ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
             imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
