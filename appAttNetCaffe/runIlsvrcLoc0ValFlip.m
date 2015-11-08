@@ -1,4 +1,4 @@
-function runIlsvrcLocValFlip( numDiv, divId, gpuId )
+function runIlsvrcLoc0ValFlip( numDiv, divId, gpuId )
     clc; clearvars -except numDiv divId gpuId; fclose all; close all;
     addpath( genpath( '..' ) ); init_ilsvrc15;
     setting.gpus                                = gpuId;
