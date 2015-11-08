@@ -8,13 +8,13 @@ function runIlsvrcLoc0ValFlip( numDiv, divId, gpuId )
     setting.attNetProp.normalizeImageMaxSide    = 500;
     setting.attNetProp.numScaling               = 6;
     setting.attNetProp.dilate                   = 1 / 2;
-    setting.attNetProp.posIntOverRegnMoreThan   = 1 / 8;
+    setting.attNetProp.posIntOverRegnMoreThan   = 1 / 16;
     setting.attNetProp.maximumImageSize         = 9e6;
-    setting.attNetProp.numTopClassification     = 10;
+    setting.attNetProp.numTopClassification     = 5;
     setting.attNetProp.numTopDirection          = 1;
-    setting.attNetProp.onlyTargetAndBackground  = false;
+    setting.attNetProp.onlyTargetAndBackground  = true;
     setting.attNetProp.directionVectorSize      = 30;
-    setting.attNetProp.minNumDetectionPerClass  = 3;
+    setting.attNetProp.minNumDetectionPerClass  = 10;
     setting.attNetDet0.type                     = 'STATIC';
     setting.attNetDet0.rescaleBox               = 1;
     setting.attNetDet0.onlyTargetAndBackground  = setting.attNetProp.onlyTargetAndBackground;
