@@ -1,10 +1,10 @@
-function runIlsvrcLocVal( numDiv, divId, gpuId )
+function runIlsvrcLocValFlip( numDiv, divId, gpuId )
     clc; clearvars -except numDiv divId gpuId; fclose all; close all;
     addpath( genpath( '..' ) ); init_ilsvrc15;
     setting.gpus                                = gpuId;
     setting.db                                  = path.db.ilsvrcclsloc2015;
     setting.netInfo                             = path.attNetCaffe.ilsloc;
-    setting.attNetProp.flip                     = false;
+    setting.attNetProp.flip                     = true;
     setting.attNetProp.normalizeImageMaxSide    = 500;
     setting.attNetProp.numScaling               = 6;
     setting.attNetProp.dilate                   = 1 / 2;

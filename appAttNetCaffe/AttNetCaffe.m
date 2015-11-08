@@ -21,6 +21,7 @@ classdef AttNetCaffe < handle
         function this = AttNetCaffe...
                 ( db, settingProp, settingDet0, settingMrg0, settingDet1, settingMrg1 )
             this.db                                   = db;
+            this.settingProp.flip                     = false;
             this.settingProp.normalizeImageMaxSide    = 500;
             this.settingProp.numScaling               = 12;
             this.settingProp.dilate                   = 1 / 2;
@@ -235,7 +236,9 @@ classdef AttNetCaffe < handle
             end;
         end
         function demoDet( this, iid, wait )
+            flip = this.settingProp.flip;
             im = imread( this.db.iid2impath{ iid } );
+            if flip, im = fliplr( im ); end;
             % Demo 1: proposals.
             [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid );
             rid2tlbr = round( rid2tlbr );
@@ -438,7 +441,9 @@ classdef AttNetCaffe < handle
         function [ rid2tlbr, nid2rid, nid2cid ] = iid2propWrapper( this, iid, cidx2cid )
             % Initial guess.
             cidx2cid = cidx2cid( : )';
+            flip = this.settingProp.flip;
             im = imread( this.db.iid2impath{ iid } );
+            if flip, im = fliplr( im ); end;
             [ rid2out, rid2tlbr ] = this.initGuess( im, cidx2cid );
             % Compute each region score.
             minNumDetPerCls = this.settingProp.minNumDetectionPerClass;
@@ -564,11 +569,13 @@ classdef AttNetCaffe < handle
             rid2tlbr0 = scaleBoxes( rid2tlbr0, sqrt( rescaleBox ), sqrt( rescaleBox ) );
             rid2tlbr0 = round( rid2tlbr0 );
             % Do detection on each region.
+            flip = this.settingProp.flip;
             interpolation = 'bilinear';
             imTl = min( rid2tlbr0( 1 : 2, : ), [  ], 2 );
             imBr = max( rid2tlbr0( 3 : 4, : ), [  ], 2 );
             rid2tlbr0( 1 : 4, : ) = bsxfun( @minus, rid2tlbr0( 1 : 4, : ), [ imTl; imTl; ] ) + 1;
             im = imread( this.db.iid2impath{ iid } );
+            if flip, im = fliplr( im ); end;
             imGlobal = normalizeAndCropImage...
                 ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
             switch detType,

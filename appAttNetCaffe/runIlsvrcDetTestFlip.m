@@ -1,11 +1,11 @@
-function runIlsvrcDetTest( numDiv, divId, gpuId )
+function runIlsvrcDetTestFlip( numDiv, divId, gpuId )
     clc; clearvars -except numDiv divId gpuId; fclose all; close all;
     addpath( genpath( '..' ) ); init_ilsvrc15;
     setting.gpus                                = gpuId;
     setting.db                                  = path.db.ilsvrcdet2015;
     setting.dbte                                = path.db.ilsvrcdet2015te;
     setting.netInfo                             = path.attNetCaffe.ilsdet;
-    setting.attNetProp.flip                     = false; 
+    setting.attNetProp.flip                     = true; 
     setting.attNetProp.normalizeImageMaxSide    = 500;
     setting.attNetProp.numScaling               = 24;
     setting.attNetProp.dilate                   = 1 / 2;

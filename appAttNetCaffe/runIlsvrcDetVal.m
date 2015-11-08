@@ -4,6 +4,7 @@ function runIlsvrcDetVal( numDiv, divId, gpuId )
     setting.gpus                                = gpuId;
     setting.db                                  = path.db.ilsvrcdet2015;
     setting.netInfo                             = path.attNetCaffe.ilsdet;
+    setting.attNetProp.flip                     = false; 
     setting.attNetProp.normalizeImageMaxSide    = 500;
     setting.attNetProp.numScaling               = 24;
     setting.attNetProp.dilate                   = 1 / 2;
