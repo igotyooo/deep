@@ -72,15 +72,18 @@ function [  cid2name, ...
             iid2size( :, iid ) = [ str2double( anno.size.height ); str2double( anno.size.width ); ];
             iid2pos( iid ) = true;
         catch
+            im = imread( iid2impath{ iid } );
+            iid2size( :, iid ) = [ size( im, 1 ); size( im, 2 ); ];
             fprintf( 'Read xmls: No obj in iid %06d.\n', iid );
         end;
     end;
-    iid2impath = iid2impath( iid2pos );
-    iid2setid = iid2setid( iid2pos );
-    iid2numObj = iid2numObj( iid2pos );
-    iid2size = iid2size( :, iid2pos );
-    oid2wnid = oid2wnid( iid2pos );
-    oid2bbox = oid2bbox( iid2pos );
+    iid2ok = iid2pos | ( iid2setid == 2 );
+    iid2impath = iid2impath( iid2ok );
+    iid2setid = iid2setid( iid2ok );
+    iid2numObj = iid2numObj( iid2ok );
+    iid2size = iid2size( :, iid2ok );
+    oid2wnid = oid2wnid( iid2ok );
+    oid2bbox = oid2bbox( iid2ok );
     oid2wnid = cat( 1, oid2wnid{ : } );
     oid2bbox = cat( 1, oid2bbox{ : } );
     numIm = numel( iid2impath );
