@@ -191,10 +191,11 @@ classdef AttNetCaffe < handle
                 this.makeDet0Dir;
                 save( fpath, 'rid2tlbr', 'rid2score', 'rid2cid' );
             end;
-            if nargout,
+            if nargout && ~isempty( rid2tlbr ),
                 % 3. Merge regions.
                 [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
+                if isempty( rid2tlbr ), return; end;
                 imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
                 [ rid2tlbr, idx ] = bndtlbr( rid2tlbr, imbnd );
                 if numel( rid2score ) ~= numel( idx ),
@@ -222,10 +223,11 @@ classdef AttNetCaffe < handle
                 this.makeDet1Dir;
                 save( fpath, 'rid2tlbr', 'rid2score', 'rid2cid' );
             end;
-            if nargout,
+            if nargout && ~isempty( rid2tlbr ),
                 % 3. Merge regions.
                 [ rid2tlbr, rid2score, rid2cid ] = this.merge...
                     ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
+                if isempty( rid2tlbr ), return; end;
                 imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
                 [ rid2tlbr, idx ] = bndtlbr( rid2tlbr, imbnd );
                 if numel( rid2score ) ~= numel( idx ),
@@ -389,7 +391,7 @@ classdef AttNetCaffe < handle
                 rid2iid{ iidx } = iid * ones( size( rid2score{ iidx } ) );
                 cummt = cummt + toc( itime );
                 fprintf( '%s: ', upper( mfilename ) );
-                disploop( numIm, iidx, sprintf( 'Get det1 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
+                disploop( numIm, iidx, sprintf( 'Get det0 on IID%d in %dth(/%d) div.', iid, divId, numDiv ), cummt );
             end;
             rid2tlbr = cat( 2, rid2tlbr{ : } );
             rid2score = cat( 1, rid2score{ : } );
