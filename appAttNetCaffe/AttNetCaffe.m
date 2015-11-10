@@ -43,6 +43,7 @@ classdef AttNetCaffe < handle
             this.settingMrg0.mergingType              = 'OV';
             this.settingMrg0.mergingMethod            = 'WAVG';
             this.settingMrg0.minimumNumSupportBox     = 1;          % Ignored if mergingOverlap = 1.
+            this.settingMrg0.classWiseMerging         = true;
             this.settingDet1.type                     = 'DYNAMIC';
             this.settingDet1.rescaleBox               = 2.5;
             this.settingDet1.numTopClassification     = 1;          % Ignored if 'STATIC'.
@@ -54,6 +55,7 @@ classdef AttNetCaffe < handle
             this.settingMrg1.mergingType              = 'OV';
             this.settingMrg1.mergingMethod            = 'WAVG';
             this.settingMrg1.minimumNumSupportBox     = 0;          % Ignored if mergingOverlap = 1.
+            this.settingMrg1.classWiseMerging         = true;
             this.settingProp = setChanges...
                 ( this.settingProp, settingProp, upper( mfilename ) );
             this.settingDet0 = setChanges...
@@ -1064,31 +1066,35 @@ classdef AttNetCaffe < handle
             mergingType = mrgParams.mergingType;
             mergingMethod = mrgParams.mergingMethod;
             minNumSuppBox = mrgParams.minimumNumSupportBox;
+            classWiseMerging = mrgParams.classWiseMerging;
             if mergingOverlap == 1, return; end;
-            cids = unique( rid2cid );
-            numCls = numel( cids );
-            rid2tlbr_ = cell( numCls, 1 );
-            rid2score_ = cell( numCls, 1 );
-            rid2cid_ = cell( numCls, 1 );
-            for cidx = 1 : numCls,
-                cid = cids( cidx );
-                rid2ok = rid2cid == cid;
-                switch mergingType,
-                    case 'NMS',
-                        [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = nms( ...
-                            [ rid2tlbr( :, rid2ok ); rid2score( rid2ok ); ]', ...
-                            mergingOverlap, minNumSuppBox, mergingMethod );
-                        rid2tlbr_{ cidx } = rid2tlbr_{ cidx }';
-                    case 'OV',
-                        [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = ov( ...
-                            rid2tlbr( :, rid2ok ), rid2score( rid2ok ), ...
-                            mergingOverlap, minNumSuppBox, mergingMethod );
-                end
-                rid2cid_{ cidx } = cid * ones( size( rid2score_{ cidx } ) );
+            if classWiseMerging,
+                cids = unique( rid2cid );
+                numCls = numel( cids );
+                rid2tlbr_ = cell( numCls, 1 );
+                rid2score_ = cell( numCls, 1 );
+                rid2cid_ = cell( numCls, 1 );
+                for cidx = 1 : numCls,
+                    cid = cids( cidx );
+                    rid2ok = rid2cid == cid;
+                    switch mergingType,
+                        case 'NMS',
+                            [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = nms( ...
+                                [ rid2tlbr( :, rid2ok ); rid2score( rid2ok ); ]', ...
+                                mergingOverlap, minNumSuppBox, mergingMethod );
+                            rid2tlbr_{ cidx } = rid2tlbr_{ cidx }';
+                        case 'OV',
+                            [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = ov( ...
+                                rid2tlbr( :, rid2ok ), rid2score( rid2ok ), ...
+                                mergingOverlap, minNumSuppBox, mergingMethod );
+                    end;
+                    rid2cid_{ cidx } = cid * ones( size( rid2score_{ cidx } ) );
+                end;
+                rid2tlbr = cat( 2, rid2tlbr_{ : } );
+                rid2score = cat( 1, rid2score_{ : } );
+                rid2cid = cat( 1, rid2cid_{ : } );
+            else
             end;
-            rid2tlbr = cat( 2, rid2tlbr_{ : } );
-            rid2score = cat( 1, rid2score_{ : } );
-            rid2cid = cat( 1, rid2cid_{ : } );
             [ rid2score, idx ] = sort( rid2score, 'descend' );
             rid2tlbr = rid2tlbr( :, idx );
             rid2cid = rid2cid( idx );
