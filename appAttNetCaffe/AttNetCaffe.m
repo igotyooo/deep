@@ -1079,6 +1079,7 @@ classdef AttNetCaffe < handle
                     rid2ok = rid2cid == cid;
                     switch mergingType,
                         case 'NMS',
+                            rid2score = rid2score( : )';
                             [ rid2tlbr_{ cidx }, rid2score_{ cidx } ] = nms( ...
                                 [ rid2tlbr( :, rid2ok ); rid2score( rid2ok ); ]', ...
                                 mergingOverlap, minNumSuppBox, mergingMethod );
