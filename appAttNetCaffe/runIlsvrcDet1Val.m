@@ -26,7 +26,7 @@ function runIlsvrcDet1Val( numDiv, divId, gpuId )
     setting.attNetMrg0.minimumNumSupportBox     = 1;
     setting.attNetMrg0.classWiseMerging         = true;
     setting.attNetDet1.type                     = 'STATIC';
-    setting.attNetDet1.rescaleBox               = 2.5;
+    setting.attNetDet1.rescaleBox               = 4; 2.5;
     setting.attNetDet1.onlyTargetAndBackground  = true;
     setting.attNetDet1.directionVectorSize      = 15;
     setting.attNetDet1.minNumDetectionPerClass  = 1;
