@@ -9,7 +9,7 @@ function runIlsvrcDet0Test( numDiv, divId, gpuId )
     setting.attNetProp.normalizeImageMaxSide    = 500;
     setting.attNetProp.numScaling               = 24;
     setting.attNetProp.dilate                   = 1 / 2;
-    setting.attNetProp.posIntOverRegnMoreThan   = ( 1 / 8 );
+    setting.attNetProp.posIntOverRegnMoreThan   = 1 / 8;
     setting.attNetProp.maximumImageSize         = 9e6;
     setting.attNetProp.numTopClassification     = 3;
     setting.attNetProp.numTopDirection          = 2;
