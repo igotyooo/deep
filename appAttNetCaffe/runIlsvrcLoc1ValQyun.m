@@ -9,8 +9,8 @@ function runIlsvrcLoc1ValQyun( numDiv, divId, gpuId )
     setting.attNetMrg0.mergingMethod            = 'MAX';
     setting.attNetMrg0.minimumNumSupportBox     = 0;
     setting.attNetDet1.type                     = 'STATIC';
-    setting.attNetDet1.rescaleBox               = 8;
-    setting.attNetDet1.onlyTargetAndBackground  = setting.attNetProp.onlyTargetAndBackground;
+    setting.attNetDet1.rescaleBox               = 1;
+    setting.attNetDet1.onlyTargetAndBackground  = true;
     setting.attNetDet1.directionVectorSize      = 15;
     setting.attNetDet1.minNumDetectionPerClass  = 1;
     reset( gpuDevice( setting.gpus ) );
