@@ -51,6 +51,7 @@ classdef AttNetCaffe < handle
             this.settingDet1.onlyTargetAndBackground  = false;      % Ignored if 'DYNAMIC'.
             this.settingDet1.directionVectorSize      = 30;
             this.settingDet1.minNumDetectionPerClass  = 0;
+            this.settingDet1.weightDirection          = 0;
             this.settingMrg1.mergingOverlap           = 0.6;
             this.settingMrg1.mergingType              = 'OV';
             this.settingMrg1.mergingMethod            = 'WAVG';
@@ -666,7 +667,11 @@ classdef AttNetCaffe < handle
             x = permute( x, [ 2, 1, 3, 4 ] );
             x = gpuArray( x );
             y = vl_nnconv( x, weight, bias, 'pad', 0, 'stride', 1 );
-            y = vl_nnsoftmax( y );
+            dims = 1 : ( 4 * 2 * numel( cidx2cid ) );
+            dims = reshape( dims, [ 4, 2 * numel( cidx2cid ) ] );
+            for d = dims, y( :, :, d, : ) = vl_nnsoftmax( y( :, :, d, : ) ); end;
+            dims = ( 1 + 4 * 2 * numel( cidx2cid ) ) : size( y, 3 );
+            y( :, :, dims, : ) = vl_nnsoftmax( y( :, :, dims, : ) );
             y = gather( y );
             clear x;
         end
@@ -806,6 +811,7 @@ classdef AttNetCaffe < handle
             onlyTarAndBgd = detParams.onlyTargetAndBackground;
             dvecSize = detParams.directionVectorSize;
             minNumDetPerCls = detParams.minNumDetectionPerClass;
+            weightDirection = this.settingDet1.weightDirection;
             testBatchSize = 256 / 2;
             numMaxFeed = 50;
             interpolation = 'bilinear';
@@ -883,14 +889,14 @@ classdef AttNetCaffe < handle
                     crid2scoreTl = crid2outTl( signStop, : );
                     crid2scoreBr = crid2outBr( signStop, : );
                     crid2scoreCls = crid2outCls( cidx, : );
-                    crid2score = ( crid2scoreTl + crid2scoreBr ) / 2 * 0 + crid2scoreCls;
+                    crid2score = ( crid2scoreTl + crid2scoreBr ) / 2 * weightDirection + crid2scoreCls;
                     % Save history.
                     if minNumDetPerCls,
                         cnt = cnt + 1;
                         rid2scoreCls = rid2outCls( cidx, : );
                         rid2scoreTl = rid2out( dimTl( signStop ), : );
                         rid2scoreBr = rid2out( dimBr( signStop ), : );
-                        rid2score = ( rid2scoreTl + rid2scoreBr ) / 2 * 0 + rid2scoreCls;
+                        rid2score = ( rid2scoreTl + rid2scoreBr ) / 2 * weightDirection + rid2scoreCls;
                         rid2history{ cnt } = cat( 1, rid2tlbr( 1 : 4, : ), cidx * ones( 1, size( rid2tlbr, 2 ) ), rid2score );
                     end;
                     % Find and store detections.
