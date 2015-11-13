@@ -667,11 +667,11 @@ classdef AttNetCaffe < handle
             x = permute( x, [ 2, 1, 3, 4 ] );
             x = gpuArray( x );
             y = vl_nnconv( x, weight, bias, 'pad', 0, 'stride', 1 );
-            dims = 1 : ( 4 * 2 * numel( cidx2cid ) );
-            dims = reshape( dims, [ 4, 2 * numel( cidx2cid ) ] );
-            for d = dims, y( :, :, d, : ) = vl_nnsoftmax( y( :, :, d, : ) ); end;
-            dims = ( 1 + 4 * 2 * numel( cidx2cid ) ) : size( y, 3 );
-            y( :, :, dims, : ) = vl_nnsoftmax( y( :, :, dims, : ) );
+            % dims = 1 : ( 4 * 2 * numel( cidx2cid ) );
+            % dims = reshape( dims, [ 4, 2 * numel( cidx2cid ) ] );
+            % for d = dims, y( :, :, d, : ) = vl_nnsoftmax( y( :, :, d, : ) ); end;
+            % dims = ( 1 + 4 * 2 * numel( cidx2cid ) ) : size( y, 3 );
+            % y( :, :, dims, : ) = vl_nnsoftmax( y( :, :, dims, : ) );
             y = gather( y );
             clear x;
         end
@@ -811,7 +811,7 @@ classdef AttNetCaffe < handle
             onlyTarAndBgd = detParams.onlyTargetAndBackground;
             dvecSize = detParams.directionVectorSize;
             minNumDetPerCls = detParams.minNumDetectionPerClass;
-            weightDirection = this.settingDet1.weightDirection;
+            weightDirection = 1; % this.settingDet1.weightDirection;
             testBatchSize = 256 / 2;
             numMaxFeed = 50;
             interpolation = 'bilinear';
