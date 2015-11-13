@@ -7,7 +7,7 @@ function runIlsvrcLoc1Test( numDiv, divId, gpuId )
     setting.netInfo                             = path.attNetCaffe.ilsloc;
     setting.attNetProp.flip                     = false;
     setting.attNetProp.normalizeImageMaxSide    = 500;
-    setting.attNetProp.numScaling               = 6;
+    setting.attNetProp.numScaling               = 7; % 6;
     setting.attNetProp.dilate                   = 1 / 2;
     setting.attNetProp.posIntOverRegnMoreThan   = 1 / 16;
     setting.attNetProp.maximumImageSize         = 9e6;
