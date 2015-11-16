@@ -1,6 +1,6 @@
 function runIlsvrcDet0Val( numDiv, divId, gpuId )
     clc; clearvars -except numDiv divId gpuId; fclose all; close all;
-    addpath( genpath( '..' ) ); init_ilsvrc15;
+    addpath( genpath( '../../' ) ); init_ilsvrc15;
     setting.gpus                                = gpuId;
     setting.db                                  = path.db.ilsvrcdet2015;
     setting.netInfo                             = path.attNetCaffe.ilsdet;

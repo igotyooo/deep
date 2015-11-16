@@ -1,9 +1,8 @@
-function runIlsvrcLoc1TestFlip( numDiv, divId, gpuId )
+function runIlsvrcLoc1ValFlip( numDiv, divId, gpuId )
     clc; clearvars -except numDiv divId gpuId; fclose all; close all;
-    addpath( genpath( '..' ) ); init_ilsvrc15;
+    addpath( genpath( '../../' ) ); init_ilsvrc15;
     setting.gpus                                = gpuId;
     setting.db                                  = path.db.ilsvrcclsloc2015;
-    setting.dbte                                = path.db.ilsvrcclsloc2015te;
     setting.netInfo                             = path.attNetCaffe.ilsloc;
     setting.attNetProp.flip                     = true;
     setting.attNetProp.normalizeImageMaxSide    = 500;
@@ -33,11 +32,8 @@ function runIlsvrcLoc1TestFlip( numDiv, divId, gpuId )
     reset( gpuDevice( setting.gpus ) );
     db = Db( setting.db, path.dstDir );
     db.genDb;
-    dbte = Db( setting.dbte, path.dstDir );
-    dbte.genDb;
     attNet = AttNetCaffe( db, setting.attNetProp, setting.attNetDet0, setting.attNetMrg0, setting.attNetDet1, [  ] );
     attNet.init( setting.netInfo, setting.gpus );
-    attNet.db = dbte;
     attNet.subDbDet0( numDiv, divId );
     attNet.subDbDet1( numDiv, divId );
     caffe.reset_all(  );

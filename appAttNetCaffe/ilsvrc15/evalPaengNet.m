@@ -1,6 +1,6 @@
 %% SET PARAMETERS ONLY.
 clc; close all; fclose all; clear all; 
-addpath( genpath( '..' ) ); init;
+addpath( genpath( '../../' ) ); init_ilsvrc15;
 setting.gpus                                        = 1;
 setting.db                                          = path.db.voc2007; path.db.ilsvrcdet2015; 
 setting.io.tsDb.numScaling                          = 24;
