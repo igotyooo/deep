@@ -341,6 +341,180 @@ classdef AttNetCaffe < handle
                 waitforbuttonpress;
             end;
         end
+        function res = demoDetEachFeed( this, fid, iid )
+            flip = this.settingProp.flip;
+            im = imread( this.db.iid2impath{ iid } );
+            if flip, im = fliplr( im ); end;
+            % Demo 1: proposals.
+            [ rid2tlbr, nid2rid, nid2cid ] = this.iid2prop( iid );
+            rid2tlbr = round( rid2tlbr );
+            proposals = single( rid2tlbr );
+            % Demo 2: detection0.
+            [ rid2tlbr, rid2score, rid2cid, fid2det0 ] = this.iid2det...
+                ( iid, rid2tlbr, nid2rid, nid2cid, this.settingDet0 );
+            rid2tlbr = round( rid2tlbr );
+            detection0 = single( rid2tlbr );
+            % Demo 3: Merge0.
+            [ rid2tlbr, ~, rid2cid ] = this.merge...
+                ( rid2tlbr, rid2score, rid2cid, this.settingMrg0 );
+            imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
+            [ rid2tlbr, idx ] = bndtlbr( rid2tlbr, imbnd );
+            if numel( rid2cid ) ~= numel( idx ),
+                rid2tlbr_ = repmat( imbnd, 1, numel( rid2score ) );
+                rid2tlbr_( :, idx ) = rid2tlbr;
+                rid2tlbr = rid2tlbr_;
+            end;
+            rid2tlbr = round( rid2tlbr );
+            merge0 = single( rid2tlbr );
+            % Demo 4: Rescale0.
+            rescaleBox = this.settingDet1.rescaleBox;
+            rescale0 = scaleBoxes( merge0, sqrt( rescaleBox ), sqrt( rescaleBox ) );
+            rescale0 = round( rescale0 );
+            % Demo 5: detection1.
+            nid2rid = 1 : numel( rid2cid );
+            nid2cid = rid2cid;
+            [ rid2tlbr, rid2score, rid2cid, fid2det1 ] = this.iid2det...
+                ( iid, rid2tlbr, nid2rid, nid2cid, this.settingDet1 );
+            rid2tlbr = round( rid2tlbr );
+            detection1 = single( rid2tlbr );
+            % Demo 6: Merge1.
+            [ rid2tlbr, rid2score, rid2cid ] = this.merge...
+                ( rid2tlbr, rid2score, rid2cid, this.settingMrg1 );
+            imbnd = [ 1; 1; this.db.iid2size( :, iid ); ];
+            [ rid2tlbr, idx ] = bndtlbr( rid2tlbr, imbnd );
+            if numel( rid2score ) ~= numel( idx ),
+                rid2tlbr_ = repmat( imbnd, 1, numel( rid2score ) );
+                rid2tlbr_( :, idx ) = rid2tlbr;
+                rid2tlbr = rid2tlbr_;
+            end;
+            rid2tlbr = round( rid2tlbr );
+            merge1 = single( rid2tlbr );
+            % Display.
+            res = {  };
+            cnt = 0;
+            titleFontSize = 20;
+            titleFontColor = 'k';
+            titleBgdColor = 'w';
+            clsFontSize = 15;
+            lineWidth = 2;
+            colorCont = 'r';
+            colorDet = 'c';
+            figure( fid );
+            set( gcf, 'color', 'k' );
+            [ nr, nc, nch ] = size( im );
+            marginTl = 1 - min( 1, min( cat( 2, proposals( 1 : 2, : ), rescale0( 1 : 2, : ), [ 1; 1;] ), [  ], 2 ) );
+            marginBr = max( [ max( cat( 2, proposals( 3 : 4, : ), rescale0( 3 : 4, : ), ...
+                [ nr; nc; ] ), [  ], 2 ), [ nr; nc; ] ], [  ], 2 ) - [ nr; nc; ];
+            im_ = zeros( nr + marginTl( 1 ) + marginBr( 1 ), nc + marginTl( 2 ) + marginBr( 2 ), nch, 'uint8' );
+            im_( marginTl( 1 ) + 1 : marginTl( 1 ) + nr, marginTl( 2 ) + 1 : marginTl( 2 ) + nc, : ) = im;
+            im = im_;
+            titleX = double( marginTl( 2 ) + 3 );
+            titleY = double( marginTl( 1 ) - titleFontSize / 2 - 1 );
+            % Demo 1: proposals.
+            bid2tlbr = proposals;
+            bid2tlbr = bsxfun( @plus, bid2tlbr( 1 : 4, : ), [ marginTl; marginTl; ] );
+            imshow( im ); hold on;
+            rects = tlbr2rect( bid2tlbr );
+            for i = 1 : size( bid2tlbr, 2 );
+                rectangle( 'Position', rects( :, i ), 'EdgeColor', colorCont, 'LineWidth', lineWidth );
+            end; 
+            text( titleX, titleY, 'Proposals', ...
+                'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
+            drawnow; hold off; 
+            cnt = cnt + 1;
+            res{ cnt, 1 }.im = frame2im( getframe( gcf ) );
+            res{ cnt, 1 }.state = 'proposals';
+            % Demo 2: detection0.
+            for fid = 1 : numel( fid2det0 ),
+                bid2tlbr = fid2det0{ fid };
+                bid2tlbr( 1 : 4, : ) = bsxfun( @plus, bid2tlbr( 1 : 4, : ), [ marginTl; marginTl; ] );
+                tlbrsCont = bid2tlbr( :, bid2tlbr( end, : ) == 0 );
+                tlbrsDet = bid2tlbr( :, bid2tlbr( end, : ) == 1 );
+                rectsCont = tlbr2rect( tlbrsCont( 1 : 4, : ) );
+                rectsDet = tlbr2rect( tlbrsDet( 1 : 4, : ) );
+                imshow( im ); hold on;
+                for i = 1 : size( rectsDet, 2 );
+                    rectangle( 'Position', rectsDet( :, i ), 'EdgeColor', colorDet, 'LineWidth', lineWidth );
+                end; 
+                for i = 1 : size( rectsCont, 2 );
+                    rectangle( 'Position', rectsCont( :, i ), 'EdgeColor', colorCont, 'LineWidth', lineWidth );
+                end;
+                text( titleX, titleY, sprintf( 'Initial detection (Iter. %d)', fid ), ...
+                    'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
+                drawnow; hold off;
+                cnt = cnt + 1;
+                res{ cnt, 1 }.im = frame2im( getframe( gcf ) );
+                res{ cnt, 1 }.state = 'detection0';
+            end;
+            % Demo 3: Merge0.
+            bid2tlbr = merge0;
+            bid2tlbr = bsxfun( @plus, bid2tlbr( 1 : 4, : ), [ marginTl; marginTl; ] );
+            imshow( im ); hold on;
+            rects = tlbr2rect( bid2tlbr );
+            for i = 1 : size( bid2tlbr, 2 );
+                rectangle( 'Position', rects( :, i ), 'EdgeColor', colorDet, 'LineWidth', lineWidth );
+            end; 
+            text( titleX, titleY, 'Initial merge', ...
+                'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
+            drawnow; hold off;
+            cnt = cnt + 1;
+            res{ cnt, 1 }.im = frame2im( getframe( gcf ) );
+            res{ cnt, 1 }.state = 'merge0';
+            % Demo 4: Rescale0.
+            bid2tlbr = rescale0;
+            bid2tlbr = bsxfun( @plus, bid2tlbr( 1 : 4, : ), [ marginTl; marginTl; ] );
+            imshow( im ); hold on;
+            rects = tlbr2rect( bid2tlbr );
+            for i = 1 : size( bid2tlbr, 2 );
+                rectangle( 'Position', rects( :, i ), 'EdgeColor', colorCont, 'LineWidth', lineWidth );
+            end; 
+            text( titleX, titleY, 'Rescale', ...
+                'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
+            drawnow; hold off;
+            cnt = cnt + 1;
+            res{ cnt, 1 }.im = frame2im( getframe( gcf ) );
+            res{ cnt, 1 }.state = 'rescale0';
+            % Demo 5: detection1.
+            for fid = 1 : numel( fid2det1 ),
+                bid2tlbr = fid2det1{ fid };
+                bid2tlbr( 1 : 4, : ) = bsxfun( @plus, bid2tlbr( 1 : 4, : ), [ marginTl; marginTl; ] );
+                tlbrsCont = bid2tlbr( :, bid2tlbr( end, : ) == 0 );
+                tlbrsDet = bid2tlbr( :, bid2tlbr( end, : ) == 1 );
+                rectsCont = tlbr2rect( tlbrsCont( 1 : 4, : ) );
+                rectsDet = tlbr2rect( tlbrsDet( 1 : 4, : ) );
+                imshow( im ); hold on;
+                for i = 1 : size( rectsDet, 2 );
+                    rectangle( 'Position', rectsDet( :, i ), 'EdgeColor', colorDet, 'LineWidth', lineWidth );
+                end; 
+                for i = 1 : size( rectsCont, 2 );
+                    rectangle( 'Position', rectsCont( :, i ), 'EdgeColor', colorCont, 'LineWidth', lineWidth );
+                end;
+                text( titleX, titleY, sprintf( 'Refinement (Iter. %d)', fid ), ...
+                    'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
+                drawnow; hold off;
+                cnt = cnt + 1;
+                res{ cnt, 1 }.im = frame2im( getframe( gcf ) );
+                res{ cnt, 1 }.state = 'detection1';
+            end;
+            % Demo 6: Merge1.
+            bid2tlbr = merge1;
+            bid2tlbr = bsxfun( @plus, bid2tlbr( 1 : 4, : ), [ marginTl; marginTl; ] );
+            imshow( im ); hold on;
+            rects = tlbr2rect( bid2tlbr );
+            for i = 1 : size( bid2tlbr, 2 );
+                rectangle( 'Position', rects( :, i ), 'EdgeColor', colorDet, 'LineWidth', lineWidth * 2 );
+            end;
+            for i = 1 : size( bid2tlbr, 2 );
+                text( double( rects( 1, i ) ), double( rects( 2, i ) - clsFontSize / 2 ), this.db.cid2name{ rid2cid( i ) }, ...
+                    'color', 'k', 'FontSize', clsFontSize, 'BackgroundColor', colorDet );
+            end;
+            text( titleX, titleY, 'Final merge', ...
+                'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
+            drawnow; hold off;
+            cnt = cnt + 1;
+            res{ cnt, 1 }.im = frame2im( getframe( gcf ) );
+            res{ cnt, 1 }.state = 'merge1';
+        end
         function subDbDet0( this, numDiv, divId )
             iids = this.db.getTeiids;
             iids = iids( divId : numDiv : numel( iids ) );
@@ -560,7 +734,7 @@ classdef AttNetCaffe < handle
                 nid2cid = zeros( 0, 1 );
             end;
         end
-        function [ rid2tlbr, rid2score, rid2cid ] = iid2det...
+        function [ rid2tlbr, rid2score, rid2cid, fid2boxes ] = iid2det...
                 ( this, iid, rid2tlbr0, nid2rid0, nid2cid0, detParams )
             if isempty( rid2tlbr0 ),
                 rid2tlbr = zeros( 4, 0 );
@@ -585,11 +759,21 @@ classdef AttNetCaffe < handle
                 ( single( im ), [ imTl; imBr ], this.rgbMean, interpolation );
             switch detType,
                 case 'STATIC',
-                    [ rid2tlbr, rid2score, rid2cid ] = this.staticFitting...
-                        ( rid2tlbr0, nid2rid0, nid2cid0, imGlobal, detParams );
+                    if nargout < 4
+                        [ rid2tlbr, rid2score, rid2cid ] = this.staticFitting...
+                            ( rid2tlbr0, nid2rid0, nid2cid0, imGlobal, detParams );
+                    else
+                        [ rid2tlbr, rid2score, rid2cid, fid2boxes ] = this.staticFitting...
+                            ( rid2tlbr0, nid2rid0, nid2cid0, imGlobal, detParams );
+                    end;
                 case 'DYNAMIC',
-                    [ rid2tlbr, rid2score, rid2cid ] = this.dynamicFitting...
-                        ( rid2tlbr0, nid2rid0, nid2cid0, imGlobal, detParams );
+                    if nargout < 4
+                        [ rid2tlbr, rid2score, rid2cid ] = this.dynamicFitting...
+                            ( rid2tlbr0, nid2rid0, nid2cid0, imGlobal, detParams );
+                    else
+                        [ rid2tlbr, rid2score, rid2cid, fid2boxes ] = this.dynamicFitting...
+                            ( rid2tlbr0, nid2rid0, nid2cid0, imGlobal, detParams );
+                    end;
             end;
             if isempty( rid2tlbr ),
                 rid2tlbr = zeros( 4, 0 );
@@ -599,6 +783,11 @@ classdef AttNetCaffe < handle
             end;
             % Convert to original image domain.
             rid2tlbr = bsxfun( @minus, rid2tlbr, 1 - [ imTl; imTl; ] );
+            if nargout == 4,
+                for fid = 1 : numel( fid2boxes ),
+                    fid2boxes{ fid }( 1 : 4, : ) = bsxfun( @minus, fid2boxes{ fid }( 1 : 4, : ), 1 - [ imTl; imTl; ] );
+                end;
+            end;
         end
         function [ rid2out, rid2tlbr ] = initGuess( this, im, cidx2cid )
             dilate = this.settingProp.dilate;
@@ -675,7 +864,7 @@ classdef AttNetCaffe < handle
             y = gather( y );
             clear x;
         end
-        function [ did2tlbr, did2score, did2cid ] = dynamicFitting...
+        function [ did2tlbr, did2score, did2cid, fid2boxes ] = dynamicFitting...
                 ( this, rid2tlbr, nid2rid, nid2cid, im, detParams )
             % Preparing for data.
             numTopCls = detParams.numTopClassification;
@@ -707,6 +896,7 @@ classdef AttNetCaffe < handle
             did2cid = zeros( buffSize, 1, 'single' );
             did2fill = false( 1, buffSize );
             did = 1;
+            if nargout == 4, fid2boxes = cell( numMaxFeed, 1 ); end;
             for feed = 1 : numMaxFeed,
                 % Feedforward.
                 fprintf( '%s: %dth feed. %d regions.\n', ...
@@ -771,6 +961,9 @@ classdef AttNetCaffe < handle
                     did2score( dids ) = ( didx2scoreTl + didx2scoreBr ) / 2 + didx2scoreCls;
                     did2fill( dids ) = true;
                     did = did + numDet;
+                    if nargout == 4,
+                        fid2boxes{ feed } = cat( 2, fid2boxes{ feed }, cat( 1, did2tlbr( :, did2fill ), ones( 1, sum( did2fill ) ) ) );
+                    end;
                     % Find and store regiones to be continued.
                     rid2purebredCont = ( ~rid2det ) & rid2high & rid2purebred & ( ~rid2ss );
                     rid2branchCont = rid2high & rid2dd & ~rid2purebred;
@@ -800,12 +993,16 @@ classdef AttNetCaffe < handle
                 nid2cid = rid2tlbr( 5, : )';
                 rid2tlbr = rid2tlbr_';
                 numRegn = size( rid2tlbr, 2 );
+                if nargout == 4,
+                    fid2boxes{ feed } = cat( 2, fid2boxes{ feed }, cat( 1, rid2tlbr, zeros( 1, numRegn ) ) );
+                end;
             end;
             did2tlbr = did2tlbr( :, did2fill );
             did2score = did2score( did2fill );
             did2cid = did2cid( did2fill );
+            if nargout == 4, fid2boxes = fid2boxes( ~cellfun( @isempty, fid2boxes ) ); end;
         end
-        function [ did2tlbr, did2score, did2cid ] = staticFitting...
+        function [ did2tlbr, did2score, did2cid, fid2boxes ] = staticFitting...
                 ( this, rid2tlbr, nid2rid, nid2cid, im, detParams )
             % Preparing for data.
             onlyTarAndBgd = detParams.onlyTargetAndBackground;
@@ -838,6 +1035,7 @@ classdef AttNetCaffe < handle
             did2fill = false( 1, buffSize );
             did = 1;
             if minNumDetPerCls, rid2history = cell( numMaxFeed * numTarCls, 1 ); cnt = 0; end;
+            if nargout == 4, fid2boxes = cell( numMaxFeed, 1 ); end;
             for feed = 1 : numMaxFeed,
                 % Feedforward.
                 fprintf( '%s: %dth feed. %d regions.\n', ...
@@ -908,6 +1106,10 @@ classdef AttNetCaffe < handle
                     did2cid( dids ) = cid;
                     did2fill( dids ) = true;
                     did = did + numDet;
+                    if nargout == 4, 
+                        fid2boxes{ feed } = cat( 2, fid2boxes{ feed }, ...
+                            cat( 1, did2tlbr( :, did2fill ), ones( 1, sum( did2fill ) ) ) );
+                    end;
                     % Find and store regiones to be continued.
                     crid2cont = ~crid2det & ~crid2ss;
                     numCont = sum( crid2cont );
@@ -935,10 +1137,15 @@ classdef AttNetCaffe < handle
                 nid2cid = rid2tlbr( 5, : )';
                 rid2tlbr = rid2tlbr_';
                 numRegn = size( rid2tlbr, 2 );
+                if nargout == 4,
+                    fid2boxes{ feed } = cat( 2, fid2boxes{ feed }, ...
+                        cat( 1, rid2tlbr, zeros( 1, numRegn ) ) );
+                end;
             end;
             did2tlbr = did2tlbr( :, did2fill );
             did2score = did2score( did2fill );
             did2cid = did2cid( did2fill );
+            if nargout == 4, fid2boxes = fid2boxes( ~cellfun( @isempty, fid2boxes ) ); end;
             % Support more regions if needed.
             if minNumDetPerCls,
                 rid2history = cat( 2, rid2history{ : } );
