@@ -63,6 +63,14 @@ path.attNetCaffe.ilsloc.modelName       = 'ANET_GOO_ILSCLSLOC15';
 path.attNetCaffe.ilsloc.patchSide       = 223;
 path.attNetCaffe.ilsloc.inputSide       = 224;
 path.attNetCaffe.ilsloc.stride          = 32;
+path.attNetCaffe.vocdet.modelPath       = '/iron/net/caffe/attnet_gnet_voc07.caffemodel';
+path.attNetCaffe.vocdet.protoPath       = '/iron/net/caffe/attnet_gnet_voc07.prototxt';
+path.attNetCaffe.vocdet.protoPathTest   = '/iron/net/caffe/attnet_gnet_voc07_test.prototxt';
+path.attNetCaffe.vocdet.rgbMeanPath     = '/iron/net/caffe/attnet_gnet_voc07_rgbmean.mat';
+path.attNetCaffe.vocdet.modelName       = 'ANET_GOO_VOCDET07';
+path.attNetCaffe.vocdet.patchSide       = 223;
+path.attNetCaffe.vocdet.inputSide       = 224;
+path.attNetCaffe.vocdet.stride          = 32;
 % Do not touch the following codes.
 run( fullfile( path.lib.vlfeat, 'toolbox/vl_setup.m' ) );       % VLFeat.
 run( fullfile( path.lib.matConvNet, 'matlab/vl_setupnn.m' ) );  % MatConvnet.
