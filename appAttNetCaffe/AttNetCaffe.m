@@ -452,7 +452,7 @@ classdef AttNetCaffe < handle
             imshow( im ); hold on;
             rects = tlbr2rect( bid2tlbr );
             for i = 1 : size( bid2tlbr, 2 );
-                rectangle( 'Position', rects( :, i ), 'EdgeColor', colorDet, 'LineWidth', lineWidth );
+                rectangle( 'Position', rects( :, i ), 'EdgeColor', colorDet, 'LineWidth', lineWidth * 2 );
             end; 
             text( titleX, titleY, 'Initial merge', ...
                 'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
@@ -466,7 +466,7 @@ classdef AttNetCaffe < handle
             imshow( im ); hold on;
             rects = tlbr2rect( bid2tlbr );
             for i = 1 : size( bid2tlbr, 2 );
-                rectangle( 'Position', rects( :, i ), 'EdgeColor', colorCont, 'LineWidth', lineWidth );
+                rectangle( 'Position', rects( :, i ), 'EdgeColor', colorCont, 'LineWidth', lineWidth * 2 );
             end; 
             text( titleX, titleY, 'Rescale', ...
                 'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
@@ -484,10 +484,10 @@ classdef AttNetCaffe < handle
                 rectsDet = tlbr2rect( tlbrsDet( 1 : 4, : ) );
                 imshow( im ); hold on;
                 for i = 1 : size( rectsDet, 2 );
-                    rectangle( 'Position', rectsDet( :, i ), 'EdgeColor', colorDet, 'LineWidth', lineWidth );
+                    rectangle( 'Position', rectsDet( :, i ), 'EdgeColor', colorDet, 'LineWidth', lineWidth * 2 );
                 end; 
                 for i = 1 : size( rectsCont, 2 );
-                    rectangle( 'Position', rectsCont( :, i ), 'EdgeColor', colorCont, 'LineWidth', lineWidth );
+                    rectangle( 'Position', rectsCont( :, i ), 'EdgeColor', colorCont, 'LineWidth', lineWidth * 2 );
                 end;
                 text( titleX, titleY, sprintf( 'Refinement (Iter. %d)', fid ), ...
                     'color', titleFontColor, 'FontSize', titleFontSize, 'backgroundColor', titleBgdColor );
