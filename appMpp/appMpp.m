@@ -7,6 +7,7 @@ setting.db                              = path.db.voc2007;
 setting.net                             = path.net.vgg_m;
 setting.neuralRegnDesc.layerId          = 19;
 setting.neuralRegnDesc.scalingCriteria  = 'MIN';
+setting.neuralRegnDesc.maximumImageSize = 15e6; % To avoid memory overflow.
 setting.neuralRegnDesc.pcaDim           = 128;
 setting.neuralRegnDesc.kernelBeforePca  = 'NONE';
 setting.neuralRegnDesc.normBeforePca    = 'L2';
@@ -18,7 +19,7 @@ setting.fisher.scaleWeightingMethod     = 'L2NORM'; % NONE, ENTROPY.
 setting.fisher.spatialPyramid           = '11';
 setting.svm.kernel                      = 'NONE';
 setting.svm.norm                        = 'L2';
-if strcmp( setting.db.name, 'VOC2007' ),
+if strcmp( setting.db.name( 1 : 3 ), 'VOC' ),
 setting.svm.c                           = 1;
 else
 setting.svm.c                           = 10;
@@ -37,10 +38,7 @@ net = load( setting.net.path );
 net.name = setting.net.name;
 patchSide = getNetProperties( net, setting.neuralRegnDesc.layerId );
 setting.neuralRegnDesc.scaleId2numPixel = round( patchSide * 2 .^ ( 0 : 0.5 : 3 ) );
-neuralRegnDscrber = ...
-    NeuralRegnDscrber( db, net, ...
-    setting.neuralRegnDesc, ...
-    setting.neuralRegnDic );
+neuralRegnDscrber = NeuralRegnDscrber( db, net, setting.neuralRegnDesc, setting.neuralRegnDic );
 neuralRegnDscrber.init( setting.gpu );
 neuralRegnDscrber.trainDic;
 neuralRegnDscrber.descDb;   % Possibly skipped.
