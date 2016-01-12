@@ -51,7 +51,7 @@ imDscrber.descDb;
 svm = Svm( db, imDscrber, setting.svm );
 svm.trainSvm;
 svm.evalSvm( 'visionresearchreport@gmail.com' );
-map = Map( db, svm, setting.map.pre, setting.map.post );
+map = MapMammo( db, svm, setting.map.pre, setting.map.post );
 map.genMapDb;
 
 
