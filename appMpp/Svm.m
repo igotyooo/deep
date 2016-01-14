@@ -76,11 +76,10 @@ classdef Svm < handle
         function cid2score = predictIm( this, im )
             kernel = this.setting.kernel;
             norm = this.setting.norm;
-            cid2w = this.loadSvm;
             desc = this.srcImDscrber.im2desc...
                 ( im, kernel, norm );
             desc = cat( 1, desc, 1 );
-            cid2score = cid2w' * desc;
+            cid2score = this.cid2w' * desc;
         end
         function descs = loadDbDescs( this, iids )
             kernel = this.setting.kernel;
@@ -139,10 +138,9 @@ classdef Svm < handle
                 idx2cscore = data.idx2cscore;
             catch
                 idx2desc = this.loadDbDescs( idx2iid );
-                cid2w = this.loadSvm;
                 idx2desc = cat( 1, idx2desc, ...
                     ones( 1, size( idx2desc, 2 ) ) );
-                idx2cscore = cid2w' * idx2desc;
+                idx2cscore = this.cid2w' * idx2desc;
                 this.makeDir;
                 save( path, 'idx2cscore' );
             end
