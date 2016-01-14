@@ -1,6 +1,7 @@
 classdef Svm < handle
     properties
         db;
+        cid2w;
         srcImDscrber;
         teidx2iid;
         cid2teidx2score;
@@ -37,7 +38,9 @@ classdef Svm < handle
             cids = find( ~cid2exist );
             if isempty( cids ), 
                 fprintf( '%s: No svm to train.\n', ...
-                    upper( mfilename ) ); return; 
+                    upper( mfilename ) ); 
+                this.cid2w = this.loadSvm;
+                return; 
             end;
             idx2iid = this.db.getTriids;
             idx2iid = idx2iid( randperm( numel( idx2iid ) )' );
@@ -54,6 +57,7 @@ classdef Svm < handle
                 disploop( numIm, cnt, ...
                     sprintf( 'train svm of class %d.', cid ), cummt );
             end
+            this.cid2w = this.loadSvm;
         end
         function evalSvm( this, addrss )
             [ this.teidx2iid, this.cid2teidx2score, cid2teidxs, cid2didxs ] ...
