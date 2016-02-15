@@ -4,8 +4,6 @@ global path;
 path.lib.matConvNet                     = '/iron/lib/matconvnet_v1.0_beta12_cuda6.5_cudnn/';
 path.lib.ilsvrcDevKit                   = '/iron/lib/ILSVRC2015_devkit/devkit/';
 path.lib.vlfeat                         = '/iron/lib/vlfeat/vlfeat-0.9.19/';
-path.lib.jsgd                           = '/iron/lib/jsgd-61/';
-path.lib.selectiveSearch                = '/iron/lib/selectiveSearch/SelectiveSearchCodeIJCV/';
 path.lib.caffePaeng                     = '/iron/lib/caffe-paeng/';
 % Set dst dir.
 path.dstDir                             = '/nickel/data_ilsvrc15/';
@@ -74,11 +72,7 @@ path.attNetCaffe.vocdet.stride          = 32;
 % Do not touch the following codes.
 run( fullfile( path.lib.vlfeat, 'toolbox/vl_setup.m' ) );       % VLFeat.
 run( fullfile( path.lib.matConvNet, 'matlab/vl_setupnn.m' ) );  % MatConvnet.
-addpath( fullfile( path.lib.jsgd, '/yael/matlab' ) );           % JSGD dependency.
-addpath( fullfile( path.lib.jsgd, '/pqcodes_matlab' ) );        % JSGD dependency.
-addpath( fullfile( path.lib.jsgd, '/matlab' ) );                % JSGD main.
 addpath( fullfile( path.lib.ilsvrcDevKit, 'evaluation' ) );     % ILSVRC dev kit.
-addpath( genpath( path.lib.selectiveSearch ) );                 % Selective search.
 addpath( fullfile( path.lib.caffePaeng, 'matlab' ) );           % Caffe-Paeng.
 
 
