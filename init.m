@@ -1,4 +1,4 @@
-
+%%
 % Set lib path only.
 global path;
 path.lib.matConvNet                     = '/iron/lib/matconvnet_v1.0_beta12_cuda6.5_cudnn/';
